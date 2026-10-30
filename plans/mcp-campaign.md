@@ -64,3 +64,10 @@ Red/green witness added after initial verification: test-only insertion of
 as MCP success`. Patched save tests PASS (2). This directly discriminates the
 false-success defect. Independent review remains pending; do not treat an open
 fork PR as reviewed or ready for upstream submission.
+
+Save-result preservation review: the modified failure case now performs an
+actual unsaved object edit rather than assigning the flag. It checks serialized
+live artwork, Undo history and original disk bytes as well as stable identity
+and error status. Both focused save tests PASS on Windows with locked inputs.
+Normalization staging belongs to the separate persistence candidate; this test
+compares represented design, not raw pre-save XML or revision allocation.
