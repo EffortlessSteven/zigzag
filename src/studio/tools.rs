@@ -266,8 +266,9 @@ fn apply_text_args(spec: &mut zigzag::document::TextSpec, args: &Value) -> Resul
         for item in list {
             let at = item
                 .get("at")
-                .and_then(Value::as_u64)
-                .ok_or("kern.at must be an index")? as usize;
+                .and_then(unsigned_integer)
+                .and_then(|n| usize::try_from(n).ok())
+                .ok_or("kern.at must be an index")?;
             let mm = item
                 .get("mm")
                 .and_then(Value::as_f64)
@@ -612,6 +613,17 @@ fn text_of(r: &ToolResult) -> String {
         .join("\n")
 }
 
+/// JSON Schema integers include whole values encoded as decimals (e.g. 333.0).
+/// Keep unsigned parsing consistent with that contract without saturating an
+/// out-of-range number or treating a supplied value as omission.
+fn unsigned_integer(value: &Value) -> Option<u64> {
+    value.as_u64().or_else(|| {
+        value.as_f64().filter(|n| {
+            n.is_finite() && n.fract() == 0.0 && *n >= 0.0 && *n < u64::MAX as f64
+        }).map(|n| n as u64)
+    })
+}
+
 /// Refuse arguments a tool doesn't take (a misspelt `widht_mm` would
 /// otherwise be ignored without a word).
 fn check_args(name: &str, args: &Value) -> Result<(), String> {
@@ -714,11 +726,10 @@ impl Studio {
     pub(crate) fn resolve(&self, v: Option<&Value>) -> Result<usize, String> {
         let n = self.doc.shapes.len();
         match v {
-            Some(Value::Number(x)) => {
-                let i = x
-                    .as_u64()
-                    .ok_or("object index must be a non-negative integer")?
-                    as usize;
+            Some(value @ Value::Number(_)) => {
+                let i = unsigned_integer(value)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .ok_or("object index must be a non-negative integer")?;
                 if i < n {
                     Ok(i)
                 } else {
@@ -973,8 +984,9 @@ impl Studio {
             "move_object" => self.resolve(args.get("object")).and_then(|i| {
                 let to =
                     args.get("to")
-                        .and_then(Value::as_u64)
-                        .ok_or("`to` must be a non-negative integer")? as usize;
+                        .and_then(unsigned_integer)
+                        .and_then(|n| usize::try_from(n).ok())
+                        .ok_or("`to` must be a non-negative integer")?;
                 let to = to.min(self.doc.shapes.len() - 1);
                 self.structural(|d| {
                     let s = d.shapes.remove(i);
@@ -1047,11 +1059,18 @@ impl Studio {
             "list_documents" => Ok(ToolResult::json(&self.documents_json())),
             "switch_document" => {
                 let infos = self.tab_infos();
+                let index = match args.get("index") {
+                    None => None,
+                    Some(value) => match unsigned_integer(value).and_then(|n| usize::try_from(n).ok()) {
+                        Some(index) => Some(index),
+                        None => return ToolResult::error("index must be a non-negative integer within the platform index range"),
+                    },
+                };
                 let i = match (
-                    args.get("index").and_then(Value::as_u64),
+                    index,
                     args.get("name").and_then(Value::as_str),
                 ) {
-                    (Some(i), _) => Some(i as usize).filter(|&i| i < infos.len()),
+                    (Some(i), _) => Some(i).filter(|&i| i < infos.len()),
                     (None, Some(n)) => infos.iter().position(|t| t.name == n),
                     _ => return ToolResult::error("give index or name"),
                 };
@@ -1290,7 +1309,8 @@ impl Studio {
             width_mm: num("width_mm").unwrap_or_else(|| (hw * 0.8).min(hh * 0.8 / aspect)),
             ..Default::default()
         };
-        if let Some(n) = args.get("colors").and_then(Value::as_u64) {
+        if let Some(value) = args.get("colors") {
+            let n = unsigned_integer(value).ok_or("colors must be an integer from 2 to 10")?;
             if !(2..=10).contains(&n) {
                 return Err("colors must be 2–10 (or leave it out to find them)".into());
             }
@@ -1857,11 +1877,10 @@ impl Studio {
     }
 
     fn tool_render(&mut self, args: &Value) -> Result<ToolResult, String> {
-        let width = args
-            .get("width_px")
-            .and_then(Value::as_u64)
-            .unwrap_or(900)
-            .clamp(200, 2000) as u32;
+        let width = match args.get("width_px") {
+            None => 900,
+            Some(value) => unsigned_integer(value).ok_or("width_px must be a non-negative integer within u64 range")?,
+        }.clamp(200, 2000) as u32;
         let show_jumps = args
             .get("show_jumps")
             .and_then(Value::as_bool)
@@ -2226,6 +2245,28 @@ mod tests {
                     "missing diagnostic location: {message}"
                 );
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn schema_integer_values_are_used_even_when_encoded_with_a_decimal() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let mut s = Studio::with_file(None, None);
+        ensure!(!s.run_tool("add_svg", &json!({"svg": BADGE})).is_error, "fixture failed");
+        let preview = s.run_tool("render_preview", &json!({"width_px": 333.0}));
+        ensure!(!preview.is_error, "valid integer encoding rejected");
+        let png = preview.content.iter().find_map(|content| match content {
+            Content::Image(bytes) => Some(bytes), _ => None,
+        }).context("preview image")?;
+        let width: [u8; 4] = png.get(16..20).context("PNG width")?.try_into()?;
+        ensure!(u32::from_be_bytes(width) == 333, "accepted integer value silently defaulted");
+        ensure!(s.resolve(Some(&json!(1.0))).map_err(anyhow::Error::msg)? == 1, "decimal object index rejected");
+        ensure!(!s.run_tool("switch_document", &json!({"index": 0.0})).is_error, "decimal tab index rejected");
+        ensure!(unsigned_integer(&json!(u64::MAX)) == Some(u64::MAX), "integer boundary lost precision");
+        for invalid in [json!(-1), json!(1.5), json!(1e40)] {
+            ensure!(unsigned_integer(&invalid).is_none(), "invalid integer saturated");
+            ensure!(s.run_tool("render_preview", &json!({"width_px": invalid})).is_error, "supplied invalid width defaulted");
         }
         Ok(())
     }
