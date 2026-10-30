@@ -7,7 +7,7 @@ records exact heads, commands, results and applicability.
 ## Completed qualification
 
 The current code passes Windows Rust 1.95 and native Linux selections: 143 library
-tests, 3 bridge tests and 183 Studio tests per platform. Existing benchmarks remain
+tests, 3 bridge tests and 184 Studio tests per platform. Existing benchmarks remain
 ignored (1 library, 3 Studio). Windows and Apple-target GUI/Bluetooth compilation
 passes. Earlier full-suite failures are retained in issue #9 and raw logs.
 
@@ -31,7 +31,8 @@ repairs remain covered by the integrated run.
 - Embedded authority, user-scoped I/O, document targeting, authentication and
   protocol/release changes require their own settled workflow decisions.
 
-Keep fork plans out of eventual upstream packages. When combining #3 and #5,
-retain the integrated preflight/schema composition repair; independent passing
-branches alone do not establish their combined behavior. Refresh proof for the
-actual extracted contribution before Steven authorizes submission.
+Keep fork plans out of eventual upstream packages. The #3/#5 composition repair
+now lives in the topics, and direct topic merge 6b35cab passes all 27 MCP tool
+tests. #12 now observes admitted requests as well as accepted results. Both
+fresh findings have been repaired and their counterexamples tested. Refresh
+proof for the actual extracted contribution before Steven authorizes submission.

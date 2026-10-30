@@ -17,7 +17,7 @@ not a delivery quota or an agreed upstream architecture.
 | [#6](https://github.com/EffortlessSteven/zigzag/pull/6) | Expired queued-call admission and truthful started outcomes | Real HTTP queued and committed paths tested; client cancellation remains separate. |
 | [#7](https://github.com/EffortlessSteven/zigzag/pull/7) | Put hardware qualification next to its claim | Wording only; physical qualification remains unavailable. |
 | [#8](https://github.com/EffortlessSteven/zigzag/pull/8) | Declare geometry tests' existing JSON dependency | 72 selected vendored tests pass; root test selection is different. |
-| [#12](https://github.com/EffortlessSteven/zigzag/pull/12) | Observe completed UI stitch plans | Preserve Undo/drag assertions without depending on frame count or rendering generation. |
+| [#12](https://github.com/EffortlessSteven/zigzag/pull/12) | Observe UI planning requests and completion | Preserve Undo/drag assertions; detect requests hidden by discarded stale results. |
 | [#13](https://github.com/EffortlessSteven/zigzag/pull/13) | Preserve agent output through EOF | Exit/EOF ordering repaired; real send lookup, flags, stdin and streamed completion tested. |
 | [#14](https://github.com/EffortlessSteven/zigzag/pull/14) | Control simulator time explicitly in stage-sensitive tests | Normal simulation remains automatic; manual Session/UI lifecycle tests hold observed stages. |
 | [#15](https://github.com/EffortlessSteven/zigzag/pull/15) | Join recovery writer before restoration assertions | UI persistence stays asynchronous; tests observe actual completion. |

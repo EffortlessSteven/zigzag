@@ -1,7 +1,7 @@
 # Fork candidate qualification
 
 Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
-Tested combined code/fixture head: `35ad1be4201982d02c7fda077c3519676dd21c5a`. Later changes are documentation
+Tested combined code/fixture head: `c1452e428f492858ed6f652a3d5b6435f9bf0c1e`. Later changes are documentation
 only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
 No upstream submission, fork-main merge, release or hardware qualification is
 claimed. These are open candidates, not a required count of contributions.
@@ -10,13 +10,13 @@ claimed. These are open candidates, not a required count of contributions.
 | --- | --- | --- |
 | #1 | `fix/mcp-save-result` | `4dd38e2c79cbc40ce699db34265b3617449e1e14` |
 | #2 | `fix/atomic-file-replacement` | `bbaf8458408e215d72af5ddda40e51c2d175ad52` |
-| #3 | `fix/current-document-batches` | `6530304ea2a76374e76ced0629dd07b0d45cb490` |
+| #3 | `fix/current-document-batches` | `69570f64d1a402503a9de6f0ea96b53498fdf318` |
 | #4 | `fix/bridge-json-rpc` | `d9db78c1d28ddcc38144a72de70e0674879322f6` |
-| #5 | `fix/mcp-schema-validation` | `942b9ecf0f61112d38fb3cb7dee7d246efbd93bb` |
+| #5 | `fix/mcp-schema-validation` | `30f6fd28498d1e691669554d6e5f921eed5688fa` |
 | #6 | `fix/mcp-expired-calls` | `920951104473f9987c4911730dca86621bb124ce` |
 | #7 | `docs/skitch-qualification` | `430a2695fbb1b642728d829059645872f39aa3d2` |
 | #8 | `test/vendored-geometry` | `3ac4f3affb06323743a33cea8e70c551a6621dc1` |
-| #12 | `fix/ui-worker-test-completion` | `438481cb92d5a185b28cf2cc56b5d21cb27c8262` |
+| #12 | `fix/ui-worker-test-completion` | `eb5af9b17b55722751fe828dcc66d6c3d080e30c` |
 | #13 | `test/portable-agent-process` | `4e078fcbd840b00a4e05c11f3e0543b183558053` |
 | #14 | `test/manual-simulator-clock` | `3b2aba6f390b1c0a0c6877d7e412a798420dbecf` |
 | #15 | `test/session-writer-completion` | `b187d9a8e42772bda2b5ede000d5512ed514685c` |
@@ -31,7 +31,7 @@ Separate target directories avoid sharing Windows/Linux/compiler artifacts.
 | --- | --- | --- |
 | Library, GUI feature enabled | PASS: 143, 1 ignored | PASS: 143, 1 ignored |
 | `zigzag-mcp` | PASS: 3 | PASS: 3 |
-| `zigzag-studio` | PASS: 183, 3 ignored | PASS: 183, 3 ignored |
+| `zigzag-studio` | PASS: 184, 3 ignored | PASS: 184, 3 ignored |
 | `zigzag` CLI | 0 selected, no added coverage | 0 selected, no added coverage |
 
 Commands:
@@ -48,8 +48,8 @@ std-only Rust helper during execution and checks real executable identity, flags
 stdin and streamed results. It does not establish installed-agent interoperability.
 
 Local raw logs and exact command/head receipts are
-`.git/qualification/qualified-msrv-*.log`, `qualified-msrv.json`,
-`qualified-linux-0.log`, and `qualified-linux.json`. They are local working
+`.git/qualification/final-windows.log`, `final-windows.json`,
+`final-linux.log`, `final-linux.json`, and the final GUI/Bluetooth check records. They are local working
 artifacts, not upstream-accessible evidence; the material results are above.
 
 Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
@@ -64,11 +64,19 @@ metadata does not select them as workspace packages.
   discarding prepared state after replacement. Both are repaired in #2.
 - Batch tests exposed grouping Undo, history cloning, stale deletion names and
   static-key preflight gaps. Combining #3 and #5 also exposed premature numeric
-  reference validation. The composition repair in integration commit afaa940
-  must accompany any future combination/extraction of those topics.
+  reference validation. The repair now lives in both topics (69570f6 and 30f6fd2), not only
+  integration commit afaa940. Their direct merge 6b35cab passes all 27 MCP tool
+  tests. Restoring value validation in raw preflight fails the numeric-reference
+  test with an unresolved string; the restored test checks the applied angle.
+  The initially broader selection also hit the known UI timing assertion in
+  decorative fills; that selection did not include #12. The final integrated
+  full runs above include #12 and pass without weakening that assertion.
 - Loaded UI failures read the old stitch plan while the worker was pending.
   Rendering generations also included transformed previews. #12 waits for actual
-  completion and counts completed plans; removing drag commit fails its oracle.
+  completion and checks both request generation and accepted results. A
+  controlled two-request/one-accepted-result case demonstrates the distinction.
+  Scheduling work during either point or object drag fails the new admission
+  assertion; removing drag commit also fails its oracle.
 - The portable process fixture exposed real output loss when Exit preceded
   stdout. #13 retains exit until EOF. Its event-order regression failed before
   that correction. Ignoring executable override or changing send's prompt also
@@ -88,7 +96,8 @@ exercise the combined repairs, including the originally failing cases.
 
 Owner review checked completion ordering, real send wiring, clock consistency,
 write-state outcomes and the preserved assertions, with discriminating controls.
-Addressed review threads have evidence-backed replies. CodeRabbit reviewed #13
+The fresh composition and hidden-request findings are fixed on their owning
+topics and their threads have evidence-backed replies. CodeRabbit reviewed #13
 and its wiring feedback was repaired; no fresh independent approval of every
 latest topic is claimed. Keep candidates open for substantive review and Steven's
 selection. Green tests do not authorize upstream publication or release.
