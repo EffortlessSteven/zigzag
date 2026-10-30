@@ -1892,6 +1892,21 @@ mod tests {
     </svg>"##;
 
     #[test]
+    fn unmodified_failed_save_as_is_an_mcp_error() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let blocker = std::env::temp_dir().join(format!("zigzag-save-blocker-{}", std::process::id()));
+        let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&blocker)?;
+        drop(file);
+        let mut s = Studio::with_file(None, None);
+        ensure!(!s.modified, "fixture is already modified");
+        let result = s.run_tool("save", &json!({"path": blocker.join("save-as.svg")}));
+        std::fs::remove_file(&blocker)?;
+        ensure!(result.is_error, "filesystem failure was reported as MCP success");
+        ensure!(!s.modified && s.doc.path.is_none(), "failure changed saved state");
+        Ok(())
+    }
+
+    #[test]
     fn save_reports_filesystem_result_independently_of_modified() -> anyhow::Result<()> {
         use anyhow::ensure;
         let dir = std::env::temp_dir().join(format!("zigzag-save-result-{}", std::process::id()));
