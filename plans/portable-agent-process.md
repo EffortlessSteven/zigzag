@@ -28,7 +28,7 @@ All 15 standalone Windows agent tests pass. Negative controls fail when:
 - lookup ignores the configured executable (the safe decoy is detected);
 - send changes the supplied stdin (the recorded bytes differ).
 
-The final combined code/test head is 35ad1be4201982d02c7fda077c3519676dd21c5a.
+The earlier combined code/test head was 35ad1be4201982d02c7fda077c3519676dd21c5a.
 On Windows Rust 1.95.0 and native Ubuntu/WSL Rust 1.98.1, full library/binary
 selection passes: 143 library tests (1 ignored), 3 bridge tests, and 183 Studio
 tests (3 ignored). The CLI selects zero tests, not extra coverage. GUI/Bluetooth
@@ -43,3 +43,20 @@ controls; current qualification is not a claim of fresh independent approval.
 
 Fork only. This plan is excluded from any eventual upstream package. Real
 installed-agent interoperability and authority policy remain separate work.
+
+## Child completion witness
+
+A successful child libtest exit can mean an unmatched --exact filter ran zero
+cases, or the fixture's missing enable flag selected its intentional no-op path.
+The child now writes versioned completion bytes only after all send assertions;
+the parent requires and validates that file, derived from the existing stdin
+record path. The event-order test retains its deliberate no-op helper behavior.
+No production adapter, environment interface or launcher hook changed.
+
+Rust 1.95 agent selection: PASS, 15 tests before and after negative controls.
+An unmatched child filter and a removed enabling flag each FAIL the parent with
+`send fixture did not complete its assertions`, rather than a compile error.
+Both mutants were restored. The fixture compiler was pinned to Rust 1.95 too.
+Local main-checkout proof is `.git/qualification/fixture-witness-*.log` and
+`fixture-witness-results.json`; current integrated qualification remains owned
+by the combined fork record. This does not establish installed-agent compatibility.
