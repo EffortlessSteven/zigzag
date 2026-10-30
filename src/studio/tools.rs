@@ -289,8 +289,9 @@ fn apply_text_args(spec: &mut zigzag::document::TextSpec, args: &Value) -> Resul
         for item in list {
             let at = item
                 .get("at")
-                .and_then(Value::as_u64)
-                .ok_or("kern.at must be an index")? as usize;
+                .and_then(unsigned_integer)
+                .and_then(|n| usize::try_from(n).ok())
+                .ok_or("kern.at must be an index")?;
             let mm = item
                 .get("mm")
                 .and_then(Value::as_f64)
@@ -345,7 +346,7 @@ pub fn tool_specs() -> Value {
                     "border": { "type": ["boolean", "null"], "description": "Satin on a filled shape: true = along its outline, false = across it as a column." },
                     "spiral": { "type": ["boolean", "null"], "description": "Contour fill as one spiral out from the center (or the start point) instead of rings." },
                     "underlay": { "type": ["boolean", "null"] },
-                    "satin_underlay": { "description": "Satin underlay passes, or \"auto\".", "oneOf": [{ "type": "array", "items": { "type": "string", "enum": ["center", "contour", "zigzag"] } }, { "type": "string", "enum": ["auto"] }] },
+                    "satin_underlay": { "description": "Satin underlay passes, or \"auto\"; null also resets to auto.", "oneOf": [{ "type": "array", "items": { "type": "string", "enum": ["center", "contour", "zigzag"] } }, { "type": "string", "enum": ["auto"] }, { "type": "null" }] },
                     "short_stitches": { "type": ["boolean", "null"] },
                     "repeats": { "type": ["integer", "null"], "description": "Running stitch passes: 1 or 3 (bean)." },
                     "color": { "type": ["string", "null"], "description": "Thread color #rrggbb, or null for the SVG's color." },
@@ -380,8 +381,8 @@ pub fn tool_specs() -> Value {
                     "scale": { "type": "number", "description": "Scale factor, e.g. 1.5." },
                     "mirror": { "type": "string", "enum": ["horizontal", "vertical"] },
                     "rotate_deg": { "type": "number", "description": "Clockwise degrees." },
-                    "move_to_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Put the objects' center here [x, y] (mm from hoop center)." },
-                    "move_by_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Shift by [dx, dy] mm." }
+                    "move_to_mm": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Put the objects' center here [x, y] (mm from hoop center)." },
+                    "move_by_mm": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Shift by [dx, dy] mm." }
                 },
                 "required": ["objects"]
             }
@@ -393,7 +394,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "objects": { "description": "One object (index or name) or a list of them.", "oneOf": [{ "type": "integer" }, { "type": "string" }, { "type": "array", "items": { "oneOf": [{ "type": "integer" }, { "type": "string" }] } }] },
-                    "offset_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Where the copies go relative to the originals. Default [3, 3]." }
+                    "offset_mm": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Where the copies go relative to the originals. Default [3, 3]." }
                 },
                 "required": ["objects"]
             }
@@ -437,7 +438,7 @@ pub fn tool_specs() -> Value {
             "name": "switch_document",
             "description": "Bring another open document to the front, so the other tools work on it. By its index from list_documents, or its name.",
             "inputSchema": { "type": "object", "properties": {
-                "index": { "type": "integer" },
+                "index": { "type": "integer", "minimum": 0 },
                 "name": { "type": "string" }
             } }
         }),
@@ -553,7 +554,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "objects": { "type": "array", "items": obj_schema(), "description": "Objects to simplify." },
-                    "level": { "type": "number", "description": "0–100: 0 for the fewest points, 100 to stay closest to the original (each 10 halves how far the outline may move; 50 is 1 pt). Default: Auto, the level for the objects' size." }
+                    "level": { "type": ["number", "null"], "description": "0–100: 0 for the fewest points, 100 to stay closest to the original (each 10 halves how far the outline may move; 50 is 1 pt). Omitted or null: Auto, the level for the objects' size." }
                 },
                 "required": ["objects"]
             }
@@ -635,10 +636,24 @@ fn text_of(r: &ToolResult) -> String {
         .join("\n")
 }
 
+/// JSON Schema integers include whole values encoded as decimals (e.g. 333.0).
+/// Keep unsigned parsing consistent with that contract without saturating an
+/// out-of-range number or treating a supplied value as omission.
+fn unsigned_integer(value: &Value) -> Option<u64> {
+    value.as_u64().or_else(|| {
+        value.as_f64().filter(|n| {
+            n.is_finite() && n.fract() == 0.0 && *n >= 0.0 && *n < u64::MAX as f64
+        }).map(|n| n as u64)
+    })
+}
+
 /// Refuse arguments a tool doesn't take (a misspelt `widht_mm` would
 /// otherwise be ignored without a word).
 fn check_args(name: &str, args: &Value) -> Result<(), String> {
-    check_arg_names(name, args)
+    check_arg_names(name, args)?;
+    let empty = json!({});
+    let args = if args.is_null() { &empty } else { args };
+    crate::tool_args::validate(name, args, argument_specs())
 }
 
 fn argument_specs() -> &'static Value {
@@ -758,11 +773,10 @@ impl Studio {
     pub(crate) fn resolve(&self, v: Option<&Value>) -> Result<usize, String> {
         let n = self.doc.shapes.len();
         match v {
-            Some(Value::Number(x)) => {
-                let i = x
-                    .as_u64()
-                    .ok_or("object index must be a non-negative integer")?
-                    as usize;
+            Some(value @ Value::Number(_)) => {
+                let i = unsigned_integer(value)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .ok_or("object index must be a non-negative integer")?;
                 if i < n {
                     Ok(i)
                 } else {
@@ -1018,8 +1032,9 @@ impl Studio {
             "move_object" => self.resolve(args.get("object")).and_then(|i| {
                 let to =
                     args.get("to")
-                        .and_then(Value::as_u64)
-                        .ok_or("`to` must be a non-negative integer")? as usize;
+                        .and_then(unsigned_integer)
+                        .and_then(|n| usize::try_from(n).ok())
+                        .ok_or("`to` must be a non-negative integer")?;
                 let to = to.min(self.doc.shapes.len() - 1);
                 self.structural(|d| {
                     let s = d.shapes.remove(i);
@@ -1092,11 +1107,18 @@ impl Studio {
             "list_documents" => Ok(ToolResult::json(&self.documents_json())),
             "switch_document" => {
                 let infos = self.tab_infos();
+                let index = match args.get("index") {
+                    None => None,
+                    Some(value) => match unsigned_integer(value).and_then(|n| usize::try_from(n).ok()) {
+                        Some(index) => Some(index),
+                        None => return ToolResult::error("index must be a non-negative integer within the platform index range"),
+                    },
+                };
                 let i = match (
-                    args.get("index").and_then(Value::as_u64),
+                    index,
                     args.get("name").and_then(Value::as_str),
                 ) {
-                    (Some(i), _) => Some(i as usize).filter(|&i| i < infos.len()),
+                    (Some(i), _) => Some(i).filter(|&i| i < infos.len()),
                     (None, Some(n)) => infos.iter().position(|t| t.name == n),
                     _ => return ToolResult::error("give index or name"),
                 };
@@ -1371,7 +1393,8 @@ impl Studio {
             width_mm: num("width_mm").unwrap_or_else(|| (hw * 0.8).min(hh * 0.8 / aspect)),
             ..Default::default()
         };
-        if let Some(n) = args.get("colors").and_then(Value::as_u64) {
+        if let Some(value) = args.get("colors") {
+            let n = unsigned_integer(value).ok_or("colors must be an integer from 2 to 10")?;
             if !(2..=10).contains(&n) {
                 return Err("colors must be 2–10 (or leave it out to find them)".into());
             }
@@ -1938,11 +1961,10 @@ impl Studio {
     }
 
     fn tool_render(&mut self, args: &Value) -> Result<ToolResult, String> {
-        let width = args
-            .get("width_px")
-            .and_then(Value::as_u64)
-            .unwrap_or(900)
-            .clamp(200, 2000) as u32;
+        let width = match args.get("width_px") {
+            None => 900,
+            Some(value) => unsigned_integer(value).ok_or("width_px must be a non-negative integer within u64 range")?,
+        }.clamp(200, 2000) as u32;
         let show_jumps = args
             .get("show_jumps")
             .and_then(Value::as_bool)
@@ -2072,9 +2094,52 @@ impl Studio {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn integrated_batch_validates_numeric_references_after_resolution() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let mut s = Studio::with_file(None, None);
+        let result = s.run_tool("batch", &json!({"steps": [
+            {"tool": "add_svg", "arguments": {"svg": BADGE}},
+            {"tool": "get_design", "arguments": {}},
+            {"tool": "set_object", "arguments": {"object": 0, "angle": "$1.stats.width_mm"}}
+        ]}));
+        ensure!(!result.is_error, "valid resolved numeric argument rejected: {}", text_of(&result));
+        ensure!(s.undo.len() == 1, "reference batch lost its one-step Undo");
+        let report: Value = serde_json::from_str(&text_of(&result))?;
+        let width = report.pointer("/results/1/result/stats/width_mm")
+            .and_then(Value::as_f64).context("reported width")?;
+        let angle = s.doc.shapes.first().and_then(|shape| shape.params.angle)
+            .context("resolved numeric angle was ignored")?;
+        ensure!((angle - width).abs() < 1e-9, "resolved value did not reach the handler");
+        Ok(())
+    }
+
     use super::*;
     use crate::app::Studio;
     use std::io::{Read, Write};
+
+    #[test]
+    fn integrated_schemas_reject_static_batch_input_before_any_edit() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        s.replan();
+        let plans = s.replans;
+        for step in [
+            json!({"tool": "add_text", "arguments": {"text": "ZigZag", "size_mm": "large"}}),
+            json!({"tool": "render_preview", "arguments": {"width_px": 900.5}}),
+            json!({"tool": "set_object", "arguments": {"object": 0, "spacing_mm": "tight"}}),
+            json!({"tool": "add_text", "arguments": {"bold": true}}),
+            json!({"tool": "get_design", "arguments": []}),
+        ] {
+            let result = s.run_tool("batch", &json!({"steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}}, step
+            ]}));
+            ensure!(result.is_error, "invalid static arguments accepted");
+            ensure!(s.replans == plans, "static type error admitted earlier edits");
+            ensure!(s.doc.shapes.is_empty() && s.undo.is_empty() && !s.modified, "static rejection changed the design");
+        }
+        Ok(())
+    }
 
     fn named_deletion_fixture() -> anyhow::Result<(Studio, Vec<String>)> {
         use anyhow::{Context, ensure};
@@ -2531,6 +2596,179 @@ mod tests {
     }
 
     #[test]
+    fn invalid_save_paths_preserve_disk_and_real_unsaved_edits() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "zigzag-invalid-save-{}-{stamp}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&dir)?;
+        let result = (|| -> anyhow::Result<()> {
+            let file = dir.join("design.svg");
+            std::fs::write(&file, BADGE)?;
+            let mut s = Studio::with_file(Some(file.clone()), None);
+            ensure!(
+                !s.run_tool("set_object", &json!({"object": 0, "angle": 33}))
+                    .is_error,
+                "fixture edit failed"
+            );
+            ensure!(s.modified, "fixture has no unsaved work");
+            let svg = s.doc.to_svg()?;
+            let stable = s.stable.to_svg()?;
+            let history = s.undo.len();
+            for path in [json!(123), Value::Null] {
+                let response = s.run_tool("save", &json!({"path": path}));
+                ensure!(
+                    response.is_error && text_of(&response).contains("path"),
+                    "invalid path reached save"
+                );
+                ensure!(
+                    std::fs::read(&file)? == BADGE.as_bytes(),
+                    "invalid Save As overwrote original"
+                );
+                ensure!(
+                    s.doc.path.as_ref() == Some(&file) && s.doc.name == "design",
+                    "invalid Save As changed identity"
+                );
+                ensure!(
+                    s.modified && s.doc.to_svg()? == svg && s.stable.to_svg()? == stable,
+                    "invalid path discarded unsaved work"
+                );
+                ensure!(s.undo.len() == history, "invalid path changed history");
+            }
+            Ok(())
+        })();
+        let cleanup = std::fs::remove_dir_all(&dir);
+        result?;
+        cleanup?;
+        Ok(())
+    }
+
+    #[test]
+    fn input_validation_rejects_wrong_types_before_dispatch() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        for (tool, args) in [
+            ("add_text", json!({"text": "ZigZag", "size_mm": "large"})),
+            ("add_text", json!({"text": "ZigZag", "bold": "yes"})),
+            ("render_preview", json!({"width_px": 900.5})),
+            ("trace_image", json!({"path": "/logo.png", "colors": 3.5})),
+            ("set_document", json!({"remove_overlaps": 1})),
+            ("switch_document", json!({"index": -1})),
+            (
+                "duplicate_objects",
+                json!({"objects": [0], "offset_mm": [1]}),
+            ),
+            (
+                "batch",
+                json!({"steps": [{"tool": "get_design", "arguments": []}]}),
+            ),
+            ("add_text", json!({})),
+            ("add_text", json!({"text": "ZigZag", "align": "unknown"})),
+        ] {
+            let result = check_args(tool, &args);
+            ensure!(
+                result.is_err(),
+                "{tool} silently accepted invalid input: {args}"
+            );
+            if let Err(message) = result {
+                ensure!(
+                    message.contains(tool) && message.contains("arguments"),
+                    "missing diagnostic location: {message}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn schema_integer_values_are_used_even_when_encoded_with_a_decimal() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let mut s = Studio::with_file(None, None);
+        ensure!(!s.run_tool("add_svg", &json!({"svg": BADGE})).is_error, "fixture failed");
+        let preview = s.run_tool("render_preview", &json!({"width_px": 333.0}));
+        ensure!(!preview.is_error, "valid integer encoding rejected");
+        let png = preview.content.iter().find_map(|content| match content {
+            Content::Image(bytes) => Some(bytes), _ => None,
+        }).context("preview image")?;
+        let width: [u8; 4] = png.get(16..20).context("PNG width")?.try_into()?;
+        ensure!(u32::from_be_bytes(width) == 333, "accepted integer value silently defaulted");
+        ensure!(s.resolve(Some(&json!(1.0))).map_err(anyhow::Error::msg)? == 1, "decimal object index rejected");
+        ensure!(!s.run_tool("switch_document", &json!({"index": 0.0})).is_error, "decimal tab index rejected");
+        ensure!(unsigned_integer(&json!(u64::MAX)) == Some(u64::MAX), "integer boundary lost precision");
+        for invalid in [json!(-1), json!(1.5), json!(1e40)] {
+            ensure!(unsigned_integer(&invalid).is_none(), "invalid integer saturated");
+            ensure!(s.run_tool("render_preview", &json!({"width_px": invalid})).is_error, "supplied invalid width defaulted");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn input_validation_preserves_resets_defaults_and_clamping() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        check_args("get_design", &Value::Null).map_err(anyhow::Error::msg)?;
+        check_args("add_text", &json!({"text": "ZigZag"})).map_err(anyhow::Error::msg)?;
+        let mut s = Studio::with_file(None, None);
+        let invalid = s.run_tool("add_text", &json!({"text": "ZigZag", "size_mm": "large"}));
+        ensure!(
+            invalid.is_error && s.doc.shapes.is_empty(),
+            "invalid text reached editing"
+        );
+        ensure!(
+            !s.run_tool("add_svg", &json!({"svg": BADGE})).is_error,
+            "fixture failed"
+        );
+        let edit = s.run_tool("set_object", &json!({"object": 0, "spacing_mm": 100}));
+        ensure!(!edit.is_error, "clamping rejected: {}", text(&edit));
+        ensure!(
+            s.doc.shapes.first().context("shape")?.params.spacing == Some(2.0),
+            "clamping changed"
+        );
+        ensure!(
+            !s.run_tool("set_object", &json!({"object": 0})).is_error,
+            "omission rejected"
+        );
+        ensure!(
+            s.doc.shapes.first().context("shape")?.params.spacing == Some(2.0),
+            "omission reset field"
+        );
+        let reset = s.run_tool("set_object", &json!({"object": 0, "spacing_mm": null, "satin_underlay": null, "underlay": null, "color": null}));
+        ensure!(!reset.is_error, "null reset rejected: {}", text(&reset));
+        ensure!(
+            s.doc
+                .shapes
+                .first()
+                .context("shape")?
+                .params
+                .spacing
+                .is_none(),
+            "reset lost"
+        );
+        for (tool, args) in [
+            (
+                "transform_objects",
+                json!({"objects": 0, "move_to_mm": null, "move_by_mm": null}),
+            ),
+            (
+                "duplicate_objects",
+                json!({"objects": 0, "offset_mm": null}),
+            ),
+            ("simplify", json!({"objects": [0], "level": null})),
+            ("select", json!({"object": null})),
+        ] {
+            let result = s.run_tool(tool, &args);
+            ensure!(
+                !result.is_error,
+                "documented default/reset rejected: {tool}: {}",
+                text(&result)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn every_exposed_tool_has_effects_and_batch_hints_are_conservative() -> anyhow::Result<()> {
         use anyhow::{Context, ensure};
         let specs = tool_specs();
@@ -2546,6 +2784,38 @@ mod tests {
             }
         }
         ensure!(tool_policy("unknown").is_none(), "unknown tool classified");
+        Ok(())
+    }
+
+    #[test]
+    fn input_validation_checks_batch_arguments_after_reference_resolution() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        let valid = s.run_tool("batch", &json!({"steps": [
+            {"tool": "add_svg", "arguments": {"svg": BADGE}},
+            {"tool": "set_object", "arguments": {"object": "$0.added.0.index", "spacing_mm": 0.4}}
+        ]}));
+        ensure!(
+            !valid.is_error,
+            "numeric reference rejected: {}",
+            text(&valid)
+        );
+        let before = s.doc.to_svg()?;
+        let invalid = s.run_tool(
+            "batch",
+            &json!({"steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}},
+                {"tool": "set_object", "arguments": {"object": 0, "spacing_mm": "$0.added.0.name"}}
+            ]}),
+        );
+        ensure!(
+            invalid.is_error && text(&invalid).contains("spacing_mm"),
+            "resolved string accepted as number"
+        );
+        ensure!(
+            s.doc.to_svg()? == before,
+            "invalid resolved batch not rolled back"
+        );
         Ok(())
     }
 
