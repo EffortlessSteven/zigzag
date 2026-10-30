@@ -35,3 +35,10 @@ when a recognized notification envelope had no ID. The new test reproduces
 that response, then verifies suppression for array/null/scalar parameters while
 the equivalent requests still receive their invalid-request errors. Notification
 direction is now checked before parameter validation.
+
+Further review reproduced loss of an already validated ID on a parameter error.
+Fallback parameter errors now use -32602 with that ID, for both string and
+numeric IDs; invalid-header and parse errors retain their separate null-ID
+behavior. These tests and checks apply to locally generated fallback replies.
+The bridge still forwards raw messages when the studio responds; studio envelope
+conformance is tracked separately in fork issue #10.
