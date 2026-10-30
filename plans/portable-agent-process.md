@@ -1,64 +1,45 @@
-# Portable embedded-agent process fixture
+# Preserve agent output through process completion
 
-Fork issue #9. Base: 81825c4. The existing process test creates a Unix shell
-script and tries to execute it on Windows, then mutates the test process's
-global ZIGZAG_CLAUDE environment unsafely. It fails before testing streamed
-agent output. This is separate from design-agent permission policy.
+Fork PR #13, issue #9; baseline 81825c4. Process exit is reported by the stderr/
+wait thread independently of stdout. Dropping Run on Exit can lose unread JSON,
+including the session and final message. The integrated Rust 1.95 run reproduced
+only generic Done with no session; a deterministic exit-first test also failed.
 
-Extract the existing private child-launch/streaming path from send into a small
-private method. Production send still performs lookup, command construction and
-prompt handling. The test executes a child of the just-built test executable,
-selecting a private fixture test and marking only the child's environment. The
-child reads actual stdin and emits serialized stream events. Inspect generated
-Claude flags separately; do not claim real Claude/Codex compatibility.
+## Current implementation and boundary
 
-Acceptance: preserve command construction and prompt semantics, consume actual
-child output, verify session/prompt echo/completion, avoid global env mutation
-and shell-specific fixtures, and fail on spawn/timeout/wrong output. Keep the
-existing stream behavior unless a separate discriminating test reveals a defect.
-Proof: focused agent tests on Windows, native Linux if GUI dependencies permit,
-and the integrated Studio suite. No dependency or SDK/capability redesign.
-Rollback: this topic alone. No upstream publication is authorized.
+Retain observed exit status until stdout EOF, emitted after the stdout reader's
+last line on the same sender. Poll consumes those lines before completion. The
+regression covers Exit-before-lines and EOF-before-Exit, including session,
+assistant text and the real streamed completion. Stop and error mapping retain
+their behavior. This does not change client permissions or CLI compatibility.
 
-Windows proof: original process test fails on 81825c4. After extracting only
-start_command and replacing the fixture, all 14 agent tests pass. A negative
-control writing `lost prompt` instead of the supplied prompt fails with the
-actual echoed child output, proving stdin is exercised. The restored test passes.
-No global environment mutation or executable script remains in this fixture.
-The child gets its marker through Command::env and reads stdin to EOF. Timeout
-kills the owned child before returning an error. Real installed-agent permission
-and CLI compatibility claims are outside this test.
+Production send uses its original inline launch flow. Its portable integration
+test compiles a std-only Rust process fixture, then calls real AgentState::send
+in a child test process with child-scoped executable/PATH settings. The fixture
+checks actual strict-MCP/disabled-built-in flags and records executable identity
+and stdin bytes. A safe PATH decoy prevents fallback to an installed agent. There
+is no global environment mutation, shell script, new dependency or launcher hook.
+The test needs rustc, as the Cargo build does. Temporary outputs are removed.
 
-The integrated Rust 1.95 run reproduced a real adapter race: the test saw only
-Done("") and no streamed session. Exit arrives from the stderr/process-wait
-thread, independently of stdout delivery, and poll drops Run on that event.
-Revise this topic into the complete output-completion fix: retain process exit
-until stdout EOF is observed after all lines. A deterministic event-order test
-must reject exit-before-lines on the old adapter and cover both arrival orders.
-The portable child fixture remains the end-to-end proof of the same behavior.
-Client permissions and agent command construction are still out of scope.
+## Evidence
 
-The deterministic exit-first test failed before EOF tracking (`process exit
-discarded unread stdout`). Run now retains exit independently of stdout EOF;
-completion waits for both. The test also covers EOF-before-exit, late session,
-assistant output, and the actual streamed completion rather than generic Done.
-All 15 standalone Windows agent tests pass. Earlier native Linux tests passed
-before the EOF correction; final integrated cross-platform qualification follows.
+All 15 standalone Windows agent tests pass. Negative controls fail when:
+- process exit drops unread stdout;
+- lookup ignores the configured executable (the safe decoy is detected);
+- send changes the supplied stdin (the recorded bytes differ).
 
-Review identified that direct start_command coverage bypassed send's executable
-lookup/handoff. Restore the real send path with a small std-only Rust fixture
-compiled during the test. Run the send test in a child test process with scoped
-ZIGZAG_CLAUDE/PATH settings, including a safe decoy executable so wrong lookup is
-observable without invoking an installed agent. Verify actual executable identity,
-stdin bytes, session and completion. No global environment mutation or production
-launcher injection is needed; remove the now-unnecessary private extraction.
-The fixture requires rustc, as the project's Cargo build already does. Keep the
-event-order regression and final source qualification on each supported runner.
+The final combined code/test head is 35ad1be4201982d02c7fda077c3519676dd21c5a.
+On Windows Rust 1.95.0 and native Ubuntu/WSL Rust 1.98.1, full library/binary
+selection passes: 143 library tests (1 ignored), 3 bridge tests, and 183 Studio
+tests (3 ignored). The CLI selects zero tests, not extra coverage. GUI/Bluetooth
+binary checks pass on Windows and for the x86_64-apple-darwin target on Rust 1.95.
+The Apple result is cross-compilation only, not native Mac or hardware execution.
 
-The real-send fixture rejects two negative controls: ignoring the configured
-executable selects the safe decoy and fails identity comparison; replacing send's
-prompt fails the recorded stdin comparison. The selected executable also checks
-the actual strict-MCP and disabled-built-in flags. The private launch extraction
-is removed; production send uses its original inline flow plus EOF tracking.
+Commands and source identity are recorded in the integrated branch's
+plans/fork-candidate-qualification.md and local qualified-msrv/qualified-linux
+receipts. Documentation-only updates do not invalidate unchanged source proof.
+The review's send-wiring gap is addressed by the real-send test and negative
+controls; current qualification is not a claim of fresh independent approval.
 
-All 15 standalone Windows agent tests pass with real send coverage restored.
+Fork only. This plan is excluded from any eventual upstream package. Real
+installed-agent interoperability and authority policy remain separate work.
