@@ -90,3 +90,10 @@ accessor with the schema topic and keep the names/container checker identical
 and value-independent in both. The schema topic carries the full validator only
 in check_args, plus the valid numeric-reference regression. Prove the actual
 normal merge of the two topic heads, not only the earlier integrated branch.
+
+Final-read planning correction: commit now preserves the last step's planning
+state rather than marking an already current plan dirty. The new regression
+fails on 69570f6 with two plans instead of one; it also checks that a later edit
+still triggers a second needed plan and that either batch has one complete Undo.
+Windows Rust 1.95 standalone MCP tools: 22 pass. This is redundant-work repair,
+not a measured wall-time performance claim or a new generation mechanism.

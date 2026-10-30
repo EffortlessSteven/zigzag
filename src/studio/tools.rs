@@ -141,6 +141,7 @@ impl DocumentTransaction {
         s.player_acc = self.player_acc;
     }
 
+    /// Commit history without changing the plan state left by the final step.
     fn commit(self, s: &mut Studio, edited: bool) {
         let changed = edited
             || s.doc.rev() != self.doc.rev()
@@ -154,7 +155,6 @@ impl DocumentTransaction {
             s.redo.clear();
             s.stable = s.doc.clone();
             s.modified = true;
-            s.dirty = true;
         }
     }
 }
@@ -2245,6 +2245,46 @@ mod tests {
                     .collect::<Vec<_>>()
                     == grouped,
                 "{mode}: Redo lost the batch"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn atomic_batch_reuses_a_read_plan_until_another_edit() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        for edit_after_read in [false, true] {
+            let mut s = Studio::with_file(None, None);
+            s.replan();
+            let before = s.doc.to_svg()?;
+            let plans = s.replans;
+            let history = s.undo.len();
+            let mut steps = vec![
+                json!({"tool": "add_svg", "arguments": {"svg": BADGE}}),
+                json!({"tool": "get_design", "arguments": {}}),
+            ];
+            if edit_after_read {
+                steps
+                    .push(json!({"tool": "set_object", "arguments": {"object": 0, "spacing_mm": 0.6}}));
+            }
+            let result = s.run_tool("batch", &json!({"steps": steps}));
+            ensure!(!result.is_error, "batch failed: {}", text(&result));
+            let expected = if edit_after_read { 2 } else { 1 };
+            ensure!(
+                s.replans - plans == expected,
+                "edit_after_read={edit_after_read}: expected {expected} plans, performed {}",
+                s.replans - plans
+            );
+            ensure!(s.undo.len() == history + 1, "batch lost its one-step Undo");
+            ensure!(
+                !s.doc.shapes.is_empty() && !s.dirty,
+                "batch did not finish its edited plan"
+            );
+            let result = s.run_tool("undo", &json!({}));
+            ensure!(!result.is_error, "Undo failed: {}", text(&result));
+            ensure!(
+                s.doc.to_svg()? == before,
+                "Undo did not restore the whole batch"
             );
         }
         Ok(())
