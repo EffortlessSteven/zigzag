@@ -2,42 +2,36 @@
 
 Fork only. No upstream submission or release is authorized. The combined
 candidate is `review/fork-candidate`; [qualification](fork-candidate-qualification.md)
-records exact topic heads, applicable runs and their limits.
+records exact heads, commands, results and applicability.
 
-Current focused proof: 32 integrated MCP tests and the application durability
-warning/recovery test pass. The broader Studio run has 176 pass, 4 fail, 3 ignored.
-Do not call the full candidate green or independently approved on that basis.
+## Completed qualification
+
+The current code passes Windows Rust 1.95 and native Linux selections: 143 library
+tests, 3 bridge tests and 183 Studio tests per platform. Existing benchmarks remain
+ignored (1 library, 3 Studio). Windows and Apple-target GUI/Bluetooth compilation
+passes. Earlier full-suite failures are retained in issue #9 and raw logs.
+
+PRs #12–#15 repair the test/completion problems behind that qualification work:
+worker completion versus frame count/render generations, agent exit versus stdout
+EOF and real send wiring, simulator wall time versus observed stages, and recovery
+writer completion versus a polling budget. Earlier save/batch/schema/bridge/expiry
+repairs remain covered by the integrated run.
 
 ## Remaining work
 
-- [#9](https://github.com/EffortlessSteven/zigzag/issues/9): classify and repair
-  Windows test reliability. Two full-suite failures also occur on the original
-  baseline. Two additional UI/replan assertions pass in isolation; their cause
-  remains unclassified. Machine-session restoration has also been intermittent.
-- [#10](https://github.com/EffortlessSteven/zigzag/issues/10): examine running-Studio
-  envelope conformance separately from bridge fallback serialization.
-- [#11](https://github.com/EffortlessSteven/zigzag/issues/11): investigate explicit
-  client cancellation/earlier deadlines using the existing admission lifecycle.
-  Connection loss alone is not cancellation; started outcomes require honesty.
-- Rust 1.95 GUI and macOS qualification remain unrun. Physical machine and crash
-  durability qualification are separate from simulator/format/library evidence.
-- Review the latest integrated candidate substantively; addressed older threads
-  do not constitute a fresh approval. Reconcile any new valid findings.
+- Review the latest candidates substantively and select coherent contributions.
+  Addressed older threads and owner verification are not fresh independent
+  approval of every head. No fork-main merge is implied.
+- Native Mac runtime/filesystem, physical machine, native GL and crash durability
+  checks remain unrun. Compilation and simulator tests are narrower evidence.
+- [#10](https://github.com/EffortlessSteven/zigzag/issues/10): running-Studio
+  envelope conformance, separate from bridge fallback serialization.
+- [#11](https://github.com/EffortlessSteven/zigzag/issues/11): explicit client
+  cancellation/earlier deadlines, separate from server expiry and disconnect.
+- Embedded authority, user-scoped I/O, document targeting, authentication and
+  protocol/release changes require their own settled workflow decisions.
 
-## Repairs carried into the candidate
-
-Destination write-access and post-commit Save As state/recovery are corrected.
-Batch grouping Undo, history-copy cost, deletion names and static keys around
-references are corrected. Bridge parameter errors preserve validated IDs and
-notifications remain silent. Schema tests preserve real unsaved work for invalid
-save paths; the result-only tests now make an actual unsaved edit.
-
-Integration itself exposed premature schema validation of numeric references.
-Static key/container validation and resolved-value schema validation are now
-separate; both rejection-before-edit and valid-reference tests pass. Source and
-review history retain the discriminating failures, without making every PR body
-a running investigation log.
-
-Keep fork plans out of eventual upstream packages. Embedded authority, user-scoped
-I/O, document targeting, authentication and protocol/release changes require
-separate settled workflow decisions; none is implied by these correctness fixes.
+Keep fork plans out of eventual upstream packages. When combining #3 and #5,
+retain the integrated preflight/schema composition repair; independent passing
+branches alone do not establish their combined behavior. Refresh proof for the
+actual extracted contribution before Steven authorizes submission.

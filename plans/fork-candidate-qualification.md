@@ -1,11 +1,10 @@
 # Fork candidate qualification
 
-Scope: EffortlessSteven/zigzag only. Upstream baseline:
-`81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
-Integrated code/test candidate: `2fdfd17bab7488cb52c3337c504323177608e5c0`. Later documentation-only commits do
-not alter the tested Rust source. No upstream submission or fork-main merge is
-claimed. Findings below were addressed by the implementation owner; this is not
-an independent approval of the latest heads.
+Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
+Tested combined code/fixture head: `35ad1be4201982d02c7fda077c3519676dd21c5a`. Later changes are documentation
+only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
+No upstream submission, fork-main merge, release or hardware qualification is
+claimed. These are open candidates, not a required count of contributions.
 
 | Fork PR | Branch | Head |
 | --- | --- | --- |
@@ -17,78 +16,96 @@ an independent approval of the latest heads.
 | #6 | `fix/mcp-expired-calls` | `920951104473f9987c4911730dca86621bb124ce` |
 | #7 | `docs/skitch-qualification` | `430a2695fbb1b642728d829059645872f39aa3d2` |
 | #8 | `test/vendored-geometry` | `3ac4f3affb06323743a33cea8e70c551a6621dc1` |
+| #12 | `fix/ui-worker-test-completion` | `438481cb92d5a185b28cf2cc56b5d21cb27c8262` |
+| #13 | `test/portable-agent-process` | `4e078fcbd840b00a4e05c11f3e0543b183558053` |
+| #14 | `test/manual-simulator-clock` | `3b2aba6f390b1c0a0c6877d7e412a798420dbecf` |
+| #15 | `test/session-writer-completion` | `b187d9a8e42772bda2b5ede000d5512ed514685c` |
 
-## Current evidence
+## Executed qualification
 
-Windows uses Rust 1.98.0. Native Ubuntu/WSL uses Rust 1.98.1, uid 1000, with
-separate build output and native temporary files for filesystem execution.
+Windows compiler: rustc 1.95.0 (59807616e 2026-04-14).
+Native Ubuntu/WSL compiler: rustc 1.98.1 (48a229cea 2026-09-01).
+Separate target directories avoid sharing Windows/Linux/compiler artifacts.
 
-| Command / selection | Outcome | Applicability |
+| Selection | Windows Rust 1.95 | Native Linux Rust 1.98.1 |
 | --- | --- | --- |
-| `cargo test --locked --features gui --bin zigzag-studio tools::tests:: -- --skip view_tools:: --skip path_tools::` | PASS, 32 tests | Integrated candidate above. Includes actual HTTP queue expiry and committed outcome, batch scope/rollback/Undo/reference checks, schemas, real unsaved-save preservation and design workflow. |
-| Same binary, `committed_save_warning` | PASS, 1 test | Integrated candidate: visible Save As identity, stable state, recovery and successful retry. |
-| `cargo test --locked --bin zigzag-mcp` | PASS, 3 tests | Bridge source unchanged since `d9db78c`, executed on integrated source. An earlier `--bin zigzag bridge_` selected zero tests and is not proof. |
-| `cargo check --locked --features gui,ble --bins` | PASS | Integrated production source at `afaa940`; subsequent changes only add/strengthen tests. |
-| `cargo test --locked --lib` | PASS, 142 tests, 1 ignored on each OS | Persistence source `0c0ee09`, unchanged in the integrated library. Native Unix mode/symlink and effective write-access behavior executed. |
-| Same Studio binary, `save_` and `atomic_exports` | PASS, 3 and 1 tests | Persistence branch `0c0ee09`; later real-edit save test passes independently and in the combined suite. PES and HTML original-byte preservation covered. |
-| Same Studio binary, `session::tests::` | FAIL, 8 pass / 1 fail | Persistence branch: machine-design restoration failed; exact isolated retry passed. Cause not established, issue #9. |
-| `cargo test --locked --features gui --bin zigzag-studio` | FAIL, 176 pass / 4 fail / 3 ignored | Integrated source `afaa940`; two later test-only changes are separately exercised above. No full-suite green claim. |
+| Library, GUI feature enabled | PASS: 143, 1 ignored | PASS: 143, 1 ignored |
+| `zigzag-mcp` | PASS: 3 | PASS: 3 |
+| `zigzag-studio` | PASS: 183, 3 ignored | PASS: 183, 3 ignored |
+| `zigzag` CLI | 0 selected, no added coverage | 0 selected, no added coverage |
 
-The full-suite failures are agent fake-executable streaming and decorative-fill
-rendering (both previously reproduced on the unchanged baseline), plus
-`type_buttons_change_stitch_type_and_undo_restores` and
-`dragging_plans_the_stitches_once_when_let_go` (both pass in exact isolated runs;
-origin/cause unclassified). Issue #9 carries the current distinctions. No tests
-were weakened or skipped to manufacture a green result.
+Commands:
 
-Prior unchanged vendored evidence: geometry 72 tests pass; trace 222 tests pass,
-2 ignored, selected by their own manifests. Root Cargo metadata does not select
-them as workspace packages. This pass does not claim those suites were rerun
-for documentation/test-only changes outside those crates.
+- Windows: `cargo +1.95.0 test --locked --features gui --lib --bins --target-dir target/msrv-1.95 -j 4`.
+- Linux: `cargo test --locked --features gui --lib --bins --target-dir /mnt/h/Code/Rust/zigzag/target/wsl-qualification -j 4`, executed natively in Ubuntu with the repository manifest selected explicitly.
+- Windows GUI/Bluetooth compilation: `cargo +1.95.0 check --locked --features gui,ble --bins --target-dir target/msrv-1.95 -j 4`: PASS.
+- Apple source compilation: the same check with `--target x86_64-apple-darwin`: PASS. This is not linking or execution on a Mac.
+- `git diff 81825c4812a6b9df45880da3a97fc7f63ad4e51b --check`: PASS. Whole-repository formatting drift was previously identified; no broad formatting rewrite is included.
 
-## Discriminating witnesses
+The ignored tests are existing benchmarks, not skipped regressions. No existing
+assertion was weakened to achieve these passes. The real-send fixture compiles a
+std-only Rust helper during execution and checks real executable identity, flags,
+stdin and streamed results. It does not establish installed-agent interoperability.
 
-- Unprivileged native Rust read-only replacement failed before the OS write probe:
-  ordinary write was denied but rename replaced the file. It passes afterward.
-- The committed Save As test fails a deliberately wrong implementation that
-  discards prepared identity on any error. Its failure is `committed Save As
-  identity lost`; the actual implementation passes.
-- Deletion/name tests reproduced wrong-survivor editing and an out-of-bounds
-  panic before cheap name refresh. Static-key tests observed earlier execution
-  and rollback planning before the preflight correction.
-- Combining schema and key preflight rejected a valid numeric result reference
-  as a string before resolution. The integrated numeric-reference test now
-  passes alongside static invalid-input rejection.
-- Earlier save false-success, bridge serialization, integer-default and queued
-  execution witnesses remain in the topic tests/review history. Preservation
-  checks are not all claimed as red/green regressions.
+Local raw logs and exact command/head receipts are
+`.git/qualification/qualified-msrv-*.log`, `qualified-msrv.json`,
+`qualified-linux-0.log`, and `qualified-linux.json`. They are local working
+artifacts, not upstream-accessible evidence; the material results are above.
 
-Raw local outputs are retained under `.git/qualification/` with descriptive
-`persistence-*`, `integrated-review-*` and `integrated-final-*` names. They are
-local working evidence, not accessible upstream artifacts; this record carries
-the material results. Topic plans/review replies identify the individual repairs.
+Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
+trace 222 passed and 2 ignored, selected through their own manifests. Those
+standalone suites were not rerun for changes outside those crates. Root Cargo
+metadata does not select them as workspace packages.
 
-## Limits and remaining decisions
+## What the failures established
 
-NOT RUN: macOS application/filesystem execution, Rust 1.95 GUI qualification,
-real native-GUI sessions, physical Skitch upload/stitch-out, power-loss testing,
-and unusual/network filesystems. File replacement copies basic permissions;
-ACLs, ownership, hard-link identity and extended metadata are not guaranteed.
-A write-access probe is not an authorization lease across filesystem races.
+- Read-only replacement was reproduced as an unprivileged Linux user before the
+  non-truncating OS write-access check. A committed Save As identity test rejects
+  discarding prepared state after replacement. Both are repaired in #2.
+- Batch tests exposed grouping Undo, history cloning, stale deletion names and
+  static-key preflight gaps. Combining #3 and #5 also exposed premature numeric
+  reference validation. The composition repair in integration commit afaa940
+  must accompany any future combination/extraction of those topics.
+- Loaded UI failures read the old stitch plan while the worker was pending.
+  Rendering generations also included transformed previews. #12 waits for actual
+  completion and counts completed plans; removing drag commit fails its oracle.
+- The portable process fixture exposed real output loss when Exit preceded
+  stdout. #13 retains exit until EOF. Its event-order regression failed before
+  that correction. Ignoring executable override or changing send's prompt also
+  fails the restored real-send integration test using a safe decoy.
+- Rust 1.95 caught a simulator test waiting for Initial after automatic homing
+  had already reached Idle. #14 holds stages on an opt-in manual clock. Using
+  wall time for a stage timestamp fails its Session lifecycle regression.
+- The session test could proceed after a polling budget without writer
+  completion. #15 joins the actual writer and preserves restoration assertions.
+  That establishes its precondition, not a diagnosis of every older incident.
 
-Server expiry is not earlier client cancellation or retry deduplication (#11).
-Bridge fallback parsing is not running-Studio envelope conformance (#10).
-Embedded-agent authority, authentication and useful user-scoped I/O need their
-own settled design and actual negative integration evidence.
+The older 176/4 and 182/1 Studio results remain in raw logs and issue #9; they
+are not concealed or treated as current failures. The full selections above
+exercise the combined repairs, including the originally failing cases.
 
-Local contribution skills were revised in place, not imported into ZigZag:
-`pr-body`, `code-review`, `pull-request`. Their validators pass; twelve scenario
-walkthroughs were performed by the owning session, not independent agent tests.
-Backups and the walkthrough remain local under `.git/skill-backups/` and
-`.git/qualification/skill-scenario-evaluation.md`.
+## Review and remaining boundaries
 
-Cleanup preserves all open topic branches and shared build caches. The temporary
-baseline worktree and task-owned vendored lockfiles were removed after inspection.
-An automatic approval review rejected recursive removal of the scoped license
-tool cache as “blocked by policy”; `.git/license-tools` remains. No attempt was
-made to bypass that rejection or delete unrelated work.
+Owner review checked completion ordering, real send wiring, clock consistency,
+write-state outcomes and the preserved assertions, with discriminating controls.
+Addressed review threads have evidence-backed replies. CodeRabbit reviewed #13
+and its wiring feedback was repaired; no fresh independent approval of every
+latest topic is claimed. Keep candidates open for substantive review and Steven's
+selection. Green tests do not authorize upstream publication or release.
+
+NOT RUN: native Mac application/filesystem execution, physical Skitch upload or
+stitch-out, native OpenGL user sessions, power-loss tests, BLE transport runtime,
+and unusual/network filesystems. Apple cross-checks do not close those gaps.
+Basic file permissions and existing symlink behavior are covered; ownership,
+ACLs, hard-link identity and extended metadata are outside replacement guarantees.
+
+Running-Studio envelope conformance (#10), earlier client cancellation/deadlines
+(#11), embedded-agent authority and user-scoped I/O remain separate work. Server
+expiry is not client cancellation; client configuration is not server enforcement.
+Fork-only plans must be omitted from any eventual upstream package. Reconcile
+its exact extracted source and proof before submission.
+
+Cleanup retains open topic branches and shared build caches; the temporary
+baseline worktree and task-owned vendored locks were removed earlier. The scoped
+license tool cache remains after automatic execution review rejected its removal.
+No unrelated source, credentials or global toolchains were changed by cleanup.

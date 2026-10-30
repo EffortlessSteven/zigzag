@@ -10,13 +10,17 @@ not a delivery quota or an agreed upstream architecture.
 | Fork PR | Responsibility | Current state |
 | --- | --- | --- |
 | [#1](https://github.com/EffortlessSteven/zigzag/pull/1) | Preserve actual save results through Studio and MCP | Focused tests pass, including real unsaved work; no write-mechanics change. |
-| [#2](https://github.com/EffortlessSteven/zigzag/pull/2) | Stage document state and replace whole files | Stacked on #1; Unix write-access and post-commit identity/recovery findings repaired. Mac remains unqualified. |
+| [#2](https://github.com/EffortlessSteven/zigzag/pull/2) | Stage document state and replace whole files | Stacked on #1; Unix write-access and post-commit identity/recovery findings repaired. Apple sources cross-check; native Mac filesystem qualification remains. |
 | [#3](https://github.com/EffortlessSteven/zigzag/pull/3) | Current-document atomic transactions | Grouping Undo, history-copy cost, deletion names, and reference-bearing static-key checks repaired. |
 | [#4](https://github.com/EffortlessSteven/zigzag/pull/4) | Structured bridge fallback errors | Three tests pass; no claim of running-Studio envelope validation. |
-| [#5](https://github.com/EffortlessSteven/zigzag/pull/5) | Advertised input types without silent defaults | Integral numeric encodings and actual unsaved-file preservation covered; MSRV/Mac qualification remains. |
+| [#5](https://github.com/EffortlessSteven/zigzag/pull/5) | Advertised input types without silent defaults | Integral numeric encodings and actual unsaved-file preservation covered; Rust 1.95 tests pass; native Mac execution remains unrun. |
 | [#6](https://github.com/EffortlessSteven/zigzag/pull/6) | Expired queued-call admission and truthful started outcomes | Real HTTP queued and committed paths tested; client cancellation remains separate. |
 | [#7](https://github.com/EffortlessSteven/zigzag/pull/7) | Put hardware qualification next to its claim | Wording only; physical qualification remains unavailable. |
 | [#8](https://github.com/EffortlessSteven/zigzag/pull/8) | Declare geometry tests' existing JSON dependency | 72 selected vendored tests pass; root test selection is different. |
+| [#12](https://github.com/EffortlessSteven/zigzag/pull/12) | Observe completed UI stitch plans | Preserve Undo/drag assertions without depending on frame count or rendering generation. |
+| [#13](https://github.com/EffortlessSteven/zigzag/pull/13) | Preserve agent output through EOF | Exit/EOF ordering repaired; real send lookup, flags, stdin and streamed completion tested. |
+| [#14](https://github.com/EffortlessSteven/zigzag/pull/14) | Control simulator time explicitly in stage-sensitive tests | Normal simulation remains automatic; manual Session/UI lifecycle tests hold observed stages. |
+| [#15](https://github.com/EffortlessSteven/zigzag/pull/15) | Join recovery writer before restoration assertions | UI persistence stays asynchronous; tests observe actual completion. |
 
 These are open candidates, not accepted upstream contributions. Preserve useful
 work, address findings on its owning topic, and integrate through normal merges.
