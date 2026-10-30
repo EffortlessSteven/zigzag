@@ -661,7 +661,15 @@ impl Studio {
     }
 
     pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<PathBuf> {
-        match self.doc.save(path) {
+        self.save_with(path, Document::save)
+    }
+
+    fn save_with(
+        &mut self,
+        path: Option<&Path>,
+        save: impl FnOnce(&mut Document, Option<&Path>) -> anyhow::Result<PathBuf>,
+    ) -> anyhow::Result<PathBuf> {
+        match save(&mut self.doc, path) {
             Ok(p) => {
                 self.stable = self.doc.clone();
                 self.modified = false;
@@ -673,7 +681,17 @@ impl Studio {
                 Ok(p)
             }
             Err(e) => {
-                self.status = format!("Couldn't save: {e:#}");
+                if e.downcast_ref::<std::io::Error>()
+                    .is_some_and(zigzag::file_replace::replacement_committed)
+                {
+                    self.stable = self.doc.clone();
+                    // Keep recovery until a successful retry confirms durability.
+                    self.modified = true;
+                    self.dirty = true;
+                    self.status = format!("Written, but durability is unconfirmed: {e:#}");
+                } else {
+                    self.status = format!("Couldn't save: {e:#}");
+                }
                 Err(e)
             }
         }
@@ -1924,6 +1942,62 @@ pub fn mean_satin_width(s: &Shape) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn committed_save_warning_keeps_recovery_until_retry() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        use std::io;
+        let dir = tempfile::tempdir()?;
+        let old = dir.path().join("old.svg");
+        let new = dir.path().join("new.svg");
+        let mut studio = Studio::with_file(None, None);
+        studio.session = crate::session::SessionState::in_dir(Some(dir.path().to_path_buf()));
+        studio.save(Some(&old))?;
+        ensure!(!studio.modified, "initial save failed to clear modified");
+        let result = studio.save_with(Some(&new), |doc, path| {
+            let destination = doc.save(path)?;
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                zigzag::file_replace::DurabilityError {
+                    destination,
+                    source: io::Error::other("injected directory sync failure"),
+                },
+            )
+            .into())
+        });
+        ensure!(result.is_err(), "durability warning swallowed");
+        ensure!(
+            studio.doc.path.as_ref() == Some(&new) && studio.doc.name == "new",
+            "committed identity lost"
+        );
+        ensure!(
+            std::fs::read_to_string(&new)? == studio.doc.xml,
+            "visible bytes differ from live document"
+        );
+        ensure!(
+            studio.stable.xml == studio.doc.xml && studio.stable.path == studio.doc.path,
+            "stable document is stale"
+        );
+        ensure!(
+            studio.modified
+                && studio
+                    .status
+                    .starts_with("Written, but durability is unconfirmed:"),
+            "uncertain save reported as ordinary failure or success"
+        );
+        studio.write_session();
+        let recovery = dir
+            .path()
+            .join(crate::session::recovery_file(studio.session.rec));
+        ensure!(recovery.exists(), "uncertain save lost recovery");
+        studio.save(None)?;
+        studio.write_session();
+        ensure!(
+            !studio.modified && !recovery.exists(),
+            "successful retry did not clear recovery"
+        );
+        Ok(())
+    }
+
     #[test]
     fn atomic_exports_preserve_old_bytes_on_failure() -> anyhow::Result<()> {
         use anyhow::ensure;

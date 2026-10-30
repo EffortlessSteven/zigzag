@@ -2,7 +2,37 @@
 
 use std::fs::File;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Replacement completed, but syncing its directory failed. New bytes are
+/// visible; callers must commit identity while retaining recovery/uncertainty.
+#[derive(Debug)]
+pub struct DurabilityError {
+    pub destination: PathBuf,
+    pub source: io::Error,
+}
+
+impl std::fmt::Display for DurabilityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "replacement committed for {}; parent directory sync failed; durability unconfirmed",
+            self.destination.display()
+        )
+    }
+}
+
+impl std::error::Error for DurabilityError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+pub fn replacement_committed(error: &io::Error) -> bool {
+    error
+        .get_ref()
+        .is_some_and(|source| source.is::<DurabilityError>())
+}
 
 /// Write and sync a unique sibling, then atomically replace the destination.
 ///
@@ -25,6 +55,7 @@ fn replace_with_sync(
     write: impl FnOnce(&mut File) -> io::Result<()>,
     sync: impl FnOnce(&Path) -> io::Result<()>,
 ) -> io::Result<()> {
+    let requested_destination = destination;
     // Preserve the old write-through-symlink behavior, rather than replacing
     // the link itself. A dangling link is rejected before any file is written.
     let resolved;
@@ -38,7 +69,12 @@ fn replace_with_sync(
         Err(error) => return Err(error),
     };
     let permissions = match std::fs::metadata(destination) {
-        Ok(metadata) => Some(metadata.permissions()),
+        Ok(metadata) => {
+            // Rename needs directory access, but must not bypass the existing
+            // file's write check. Do not truncate, and release before replacing.
+            drop(std::fs::OpenOptions::new().write(true).open(destination)?);
+            Some(metadata.permissions())
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
     };
@@ -66,9 +102,15 @@ fn replace_with_sync(
     temporary
         .persist(destination)
         .map_err(|error| error.error)?;
-    sync(parent).map_err(|error| io::Error::other(format!(
-        "replacement committed, but parent directory sync failed; durability unconfirmed: {error}"
-    )))?;
+    sync(parent).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            DurabilityError {
+                destination: requested_destination.to_path_buf(),
+                source: error,
+            },
+        )
+    })?;
     Ok(())
 }
 
@@ -92,6 +134,40 @@ mod tests {
     use super::*;
     use anyhow::ensure;
 
+    #[test]
+    fn replacement_respects_the_operating_system_write_check() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("readonly.svg");
+        std::fs::write(&path, b"original")?;
+        let original_permissions = std::fs::metadata(&path)?.permissions();
+        let mut readonly = original_permissions.clone();
+        readonly.set_readonly(true);
+        std::fs::set_permissions(&path, readonly)?;
+        let ordinary_writable = std::fs::OpenOptions::new().write(true).open(&path).is_ok();
+        eprintln!("ordinary non-truncating write permitted: {ordinary_writable}");
+        let result = replace_file_atomic(&path, |file| file.write_all(b"replacement"));
+        let bytes = std::fs::read(&path)?;
+        std::fs::set_permissions(&path, original_permissions)?;
+        ensure!(
+            result.is_ok() == ordinary_writable,
+            "replacement bypassed the OS write-access result"
+        );
+        ensure!(
+            bytes
+                == if ordinary_writable {
+                    b"replacement".as_slice()
+                } else {
+                    b"original".as_slice()
+                },
+            "unexpected destination contents"
+        );
+        ensure!(
+            std::fs::read_dir(dir.path())?.count() == 1,
+            "temporary leaked"
+        );
+        Ok(())
+    }
+
     #[cfg(windows)]
     #[test]
     fn failed_windows_replacement_preserves_existing_file() -> anyhow::Result<()> {
@@ -111,7 +187,12 @@ mod tests {
             );
             Ok(())
         });
+        let reached_replacement = held.is_some();
         drop(held);
+        ensure!(
+            reached_replacement,
+            "writer did not reach the replacement boundary"
+        );
         ensure!(
             result.is_err(),
             "replacement of locked destination succeeded"
@@ -144,6 +225,7 @@ mod tests {
             error.to_string().contains("replacement committed"),
             "ambiguous outcome"
         );
+        ensure!(replacement_committed(&error), "typed commit outcome lost");
         ensure!(std::fs::read(&path)? == b"new", "commit was not visible");
         ensure!(
             std::fs::read_dir(dir.path())?.count() == 1,
