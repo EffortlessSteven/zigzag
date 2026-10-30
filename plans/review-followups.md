@@ -23,8 +23,8 @@ repairs remain covered by the integrated run.
   found no new blocker in the changed paths, and live threads are resolved;
   neither establishes independent approval of every head. No fork-main merge
   is implied.
-- Native Mac runtime/filesystem, physical machine, native GL and crash durability
-  checks remain unrun. Compilation and simulator tests are narrower evidence.
+- Native Mac library/recovery checks now pass for #2. Full native Mac Studio,
+  physical machine, native GL and crash durability checks remain unrun.
 - [#10](https://github.com/EffortlessSteven/zigzag/issues/10): running-Studio
   envelope conformance, separate from bridge fallback serialization.
 - [#11](https://github.com/EffortlessSteven/zigzag/issues/11): explicit client
@@ -47,3 +47,9 @@ approval or authorization to submit.
 The integration-only static-schema preflight regression is now carried in the
 optional clean schema-after-batches stack. Its 28 MCP tests pass and the
 preflight-removal control fails; see contribution preparation for the exact head.
+
+The latest #2 recovery-metadata repair passes Windows/Linux full qualification
+and focused native Mac execution. CodeRabbit completed the earlier #2 review at
+77d49f8 without actionable comments; the newer recovery commit and draft stacked
+view #16 are externally rate-limited. Re-request those exact reviews after quota
+resets; do not infer current-head approval from the earlier review.

@@ -11,13 +11,13 @@ Read-only upstream check confirmed main still at the baseline above. Every row
 has an identical complete tree outside plans/ to its source topic. No code,
 tests, notices, lockfiles or fixtures were removed. Each prepare/ branch has one
 contribution commit except #2, which has the necessary clean #1 base and a
-follow-up commit repairing the fresh special-file finding. Shared history was
+follow-up commits repairing special-file rejection and recovery metadata outcomes. Shared history was
 not rewritten. The working topics and fork PRs are preserved. All branches below are pushed only to the fork.
 
 | Fork PR | Clean branch | Exact candidate head |
 | --- | --- | --- |
 | #1 | [prepare/mcp-save-result](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-save-result) | `d0654f6c400cf66a18ecd41a98dd28a2cf4407fe` |
-| #2 | [prepare/atomic-file-replacement](https://github.com/EffortlessSteven/zigzag/tree/prepare/atomic-file-replacement) | `3eaf359f8bbc08bf753f6233b3f5cbaec98b1d04` |
+| #2 | [prepare/atomic-file-replacement](https://github.com/EffortlessSteven/zigzag/tree/prepare/atomic-file-replacement) | `2760a360340ebeb4fee85211edb8d7fd2d5ee929` |
 | #3 | [prepare/current-document-batches](https://github.com/EffortlessSteven/zigzag/tree/prepare/current-document-batches) | `a17d2e3851117b3e40dd72757faca4a04faba42f` |
 | #4 | [prepare/bridge-json-rpc](https://github.com/EffortlessSteven/zigzag/tree/prepare/bridge-json-rpc) | `c9f67b581855b0a222a53085c7451a768c557fa9` |
 | #5 | [prepare/mcp-schema-validation](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-schema-validation) | `4d3b01f4bdd43c8212b1f41cfbc653f854733775` |
@@ -40,13 +40,14 @@ already contain one focused commit and no internal plans.
 - Clean #4: Rust 1.95 `cargo test --locked --bin zigzag-mcp --target-dir target/msrv-1.95 -j 4`: PASS, three tests.
 - Every extracted diff passes `git diff --check` and contains no plans/ files. Production code/tests have no dependency on plans/. Complete product-tree equality was rechecked before pushing.
 - Other isolated-topic results retain their existing scope because extraction changed only history and omitted internal plans. No new full standalone pass for every topic is claimed. In particular, combined-fork GUI results are not a claim that an isolated topic fixes all baseline UI failures.
-- Clean #2 now includes the non-regular-target guard. Its product tree matches the revised working topic 77d49f849e665da1011279ac0c9e27a8f7820169. Standalone library proof and fresh integrated qualification are recorded in the linked qualification record.
+- Clean #2 now includes the non-regular-target guard. Its product tree matches the revised working topic e5b5d65aff5ae23b3926d68ecefb38a2a8ab7736. Standalone library proof and fresh integrated qualification are recorded in the linked qualification record.
 - Earlier #3/#5 direct composition proof still applies to the identical product trees; their static names/value boundary was preserved in both clean topics.
 
 The local exact-head execution records are `clean-topic-tests.json`,
 `clean-save.log` and `clean-bridge.log` under `.git/qualification/`.
-Native Mac execution, installed-agent interoperability, physical hardware and
-other qualification limits remain as recorded in the fork qualification.
+Native Mac library/recovery checks now pass for clean #2; installed-agent
+interoperability, physical hardware and other qualification limits remain as
+recorded in the fork qualification.
 
 PR descriptions were also reconciled: internal tracking/development-note text
 was removed from #6/#12–#15, stale integrated counts were corrected, and #8’s
@@ -82,3 +83,10 @@ source already contains this test and is unchanged by this packaging work.
 Local proof is in `.git/qualification/stacked-schema*.json` and logs. No fresh
 Linux standalone run is claimed. Preserve this stacked test when selecting both
 contributions; its preflight guarantee depends on their combined behavior.
+
+The optional stack has a draft fork review view, [#16](https://github.com/EffortlessSteven/zigzag/pull/16).
+It is an alternate view of #5, not a thirteenth contribution. Its requested
+CodeRabbit review is rate-limited. The new #2 recovery commit is also awaiting
+quota for independent re-review. Native Mac checks and current source evidence
+are linked from the qualification record. Steven accepted the jsonschema choice;
+no bespoke validator rewrite or dependency-cost claim is implied.

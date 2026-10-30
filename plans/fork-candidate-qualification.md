@@ -1,7 +1,7 @@
 # Fork candidate qualification
 
 Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
-Tested combined code/fixture head: `1bbdb3c8de0577adf7822305144b5ccb4395fea3`. Later changes are documentation
+Tested combined code/fixture head: `e032407ac4c55346d9ed002bc1811bfde9142ce3`. Later changes are documentation
 only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
 No upstream submission, fork-main merge, release or hardware qualification is
 claimed. These are open candidates, not a required count of contributions.
@@ -9,7 +9,7 @@ claimed. These are open candidates, not a required count of contributions.
 | Fork PR | Branch | Head |
 | --- | --- | --- |
 | #1 | `fix/mcp-save-result` | `4dd38e2c79cbc40ce699db34265b3617449e1e14` |
-| #2 | `fix/atomic-file-replacement` | `77d49f849e665da1011279ac0c9e27a8f7820169` |
+| #2 | `fix/atomic-file-replacement` | `e5b5d65aff5ae23b3926d68ecefb38a2a8ab7736` |
 | #3 | `fix/current-document-batches` | `69570f64d1a402503a9de6f0ea96b53498fdf318` |
 | #4 | `fix/bridge-json-rpc` | `d9db78c1d28ddcc38144a72de70e0674879322f6` |
 | #5 | `fix/mcp-schema-validation` | `30f6fd28498d1e691669554d6e5f921eed5688fa` |
@@ -31,14 +31,14 @@ Separate target directories avoid sharing Windows/Linux/compiler artifacts.
 | --- | --- | --- |
 | Library, GUI feature enabled | PASS: 144, 1 ignored | PASS: 145, 1 ignored |
 | `zigzag-mcp` | PASS: 3 | PASS: 3 |
-| `zigzag-studio` | PASS: 184, 3 ignored | PASS: 184, 3 ignored |
+| `zigzag-studio` | PASS: 186, 3 ignored | PASS: 186, 3 ignored |
 | `zigzag` CLI | 0 selected, no added coverage | 0 selected, no added coverage |
 
 Commands:
 
 - Windows: `cargo +1.95.0 test --locked --features gui --lib --bins --target-dir target/msrv-1.95 -j 4`.
 - Linux: `cargo test --locked --features gui --lib --bins --target-dir /mnt/h/Code/Rust/zigzag/target/wsl-qualification -j 4`, executed natively in Ubuntu with the repository manifest selected explicitly.
-- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at the combined code head above.
+- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 1bbdb3c; the later product change is confined to GUI-only session code, so this selection is unchanged.
 - Windows GUI/Bluetooth compilation: `cargo +1.95.0 check --locked --features gui,ble --bins --target-dir target/msrv-1.95 -j 4`: PASS.
 - Apple source compilation: the same check with `--target x86_64-apple-darwin`: PASS. This is not linking or execution on a Mac.
 - `git diff 81825c4812a6b9df45880da3a97fc7f63ad4e51b --check`: PASS. Whole-repository formatting drift was previously identified; no broad formatting rewrite is included.
@@ -49,15 +49,37 @@ std-only Rust helper during execution and checks real executable identity, flags
 stdin and streamed results. It does not establish installed-agent interoperability.
 
 Local raw logs and exact command/head receipts are
-`.git/qualification/fifo-integrated-windows.log`, `fifo-integrated-windows.json`,
-`fifo-integrated-linux.log`, `fifo-integrated-linux.json`, `fifo-core.log`,
-`fifo-core.json`, `fifo-gui-ble.*` and `fifo-apple.*`. These are local
+`.git/qualification/recovery-integrated-windows.log`, `recovery-integrated-windows.json`,
+`recovery-integrated-linux.log`, `recovery-integrated-linux.json`, `fifo-core.log`,
+`fifo-core.json`, `recovery-gui-ble.*` and `recovery-apple-check.*`. These are local
 working artifacts, not upstream-accessible evidence; the material results are above.
 
 Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
 trace 222 passed and 2 ignored, selected through their own manifests. Those
 standalone suites were not rerun for changes outside those crates. Root Cargo
 metadata does not select them as workspace packages.
+
+## Native macOS persistence qualification
+
+[Run 41041036913](https://github.com/EffortlessSteven/zigzag/actions/runs/41041036913)
+PASS on macOS 15.8.2 ARM64 with Rust 1.95.0: 143 library tests (one existing
+benchmark ignored), plus four GUI-enabled recovery/save tests. This is the clean
+#2 source, not the full integrated fork. Workflow head d33d30e differs from clean
+#2 only by its fork qualification workflow. Both persistence and session source
+blobs match the clean topic exactly; the root Cargo.lock was used unchanged.
+The tests exercise real temporary files, permissions, symlinks, replacement,
+Document saves, injected post-commit recovery warnings, metadata publication,
+restart and retry. The FIFO fixture remains Linux-only. This is not a full Mac
+Studio suite, interactive GL session, BLE or hardware qualification.
+
+Commands: `cargo +1.95.0 test --locked --lib -- --nocapture` and
+`cargo +1.95.0 test --locked --features gui --bin zigzag-studio recovery_ -- --nocapture`.
+Downloaded environment/results are under `.git/qualification/native-macos-recovery/`.
+The earlier [run 41039769416](https://github.com/EffortlessSteven/zigzag/actions/runs/41039769416)
+also passed the same library selection before the GUI caller repair.
+The workflow is isolated on qualification/macos-persistence and excluded from
+all clean submission branches. Pinned actions, read-only contents permission,
+no persisted checkout token, one bounded job; actionlint passed.
 
 ## What the failures established
 
@@ -105,6 +127,15 @@ directory test checks InvalidInput and preservation on Windows too. Standalone
 each). The integrated counts above also include the separate simulator repair.
 No new dependency, streaming export or concurrent-path lease is introduced.
 
+A later independent review reproduced a different post-commit outcome bug in
+session recovery. #2 now publishes metadata after active or inactive recovery
+replacement commits, keeps uncertain writes eligible for retry, and retains early
+return on pre-commit failure. The deterministic regression failed first with
+`committed recovery was not advertised`; it now checks real restart and retry,
+including metadata warnings and equal metadata payloads. Negative controls
+caching uncertainty or returning early for inactive warnings both fail. The
+broader Windows/Linux selections and native Mac checks above include the repair.
+
 ## Review and remaining boundaries
 
 Owner review checked completion ordering, real send wiring, clock consistency,
@@ -122,9 +153,10 @@ review threads were all resolved at inspection. Issue #9 now names the current
 qualified source; #11 received newline-only cleanup. This is bounded owner review,
 not independent approval or qualification of the deferred protocol/authority work.
 
-NOT RUN: native Mac application/filesystem execution, physical Skitch upload or
-stitch-out, native OpenGL user sessions, power-loss tests, BLE transport runtime,
-and unusual/network filesystems. Apple cross-checks do not close those gaps.
+NOT RUN: the full native Mac Studio suite, interactive Mac application sessions,
+physical Skitch upload or stitch-out, native OpenGL sessions, power-loss tests,
+BLE transport runtime, and unusual/network filesystems. The native Mac checks
+above establish the selected library/recovery paths only.
 Basic file permissions and existing symlink behavior are covered; ownership,
 ACLs, hard-link identity and extended metadata are outside replacement guarantees.
 
@@ -138,3 +170,9 @@ Cleanup retains open topic branches and shared build caches; the temporary
 baseline worktree and task-owned vendored locks were removed earlier. The scoped
 license tool cache remains after automatic execution review rejected its removal.
 No unrelated source, credentials or global toolchains were changed by cleanup.
+
+The requested fresh CodeRabbit review of #2 at 77d49f8 completed without
+actionable comments. The new recovery commit and the optional stacked #5 view
+(PR #16, head 49fa259) were requested afterward but hit the one-review-per-hour
+limit. Their independent re-review remains BLOCKED by that external quota;
+requests and prior green checks are not approvals of these latest candidates.
