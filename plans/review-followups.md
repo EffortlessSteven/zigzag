@@ -19,9 +19,9 @@ repairs remain covered by the integrated run.
 
 ## Remaining work
 
-- Independent review and Steven’s selection remain. The additional owner pass
-  found no new blocker in the changed paths, and live threads are resolved;
-  neither establishes independent approval of every head. No fork-main merge
+- Steven’s contribution selection remains. Separate agent reviews of current
+  #2 and the stacked #3/#5 source are complete; the one cleanup finding was
+  reproduced, repaired and reviewed. No fork-main merge or upstream approval
   is implied.
 - Native Mac library/recovery checks now pass for #2. Full native Mac Studio,
   physical machine, native GL and crash durability checks remain unrun.
@@ -48,8 +48,8 @@ The integration-only static-schema preflight regression is now carried in the
 optional clean schema-after-batches stack. Its 28 MCP tests pass and the
 preflight-removal control fails; see contribution preparation for the exact head.
 
-The latest #2 recovery-metadata repair passes Windows/Linux full qualification
-and focused native Mac execution. CodeRabbit completed the earlier #2 review at
-77d49f8 without actionable comments; the newer recovery commit and draft stacked
-view #16 are externally rate-limited. Re-request those exact reviews after quota
-resets; do not infer current-head approval from the earlier review.
+Current #2 recovery metadata and known-sidecar cleanup pass full Windows/Linux
+qualification and focused native Mac execution. Independent reviews are complete
+for #2 at 74b345a and the optional schema stack at 49fa259. CodeRabbit-specific
+requests were rate-limited, so its earlier 77d49f8 result is not represented as a
+review of the newer code. See final-checks.md for attribution and limits.

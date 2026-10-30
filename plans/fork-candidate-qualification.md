@@ -1,7 +1,7 @@
 # Fork candidate qualification
 
 Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
-Tested combined code/fixture head: `e032407ac4c55346d9ed002bc1811bfde9142ce3`. Later changes are documentation
+Tested combined code/fixture head: `d4171921f3a566ffbd144a35ca0583aa20998a3e`. Later changes are documentation
 only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
 No upstream submission, fork-main merge, release or hardware qualification is
 claimed. These are open candidates, not a required count of contributions.
@@ -9,7 +9,7 @@ claimed. These are open candidates, not a required count of contributions.
 | Fork PR | Branch | Head |
 | --- | --- | --- |
 | #1 | `fix/mcp-save-result` | `4dd38e2c79cbc40ce699db34265b3617449e1e14` |
-| #2 | `fix/atomic-file-replacement` | `e5b5d65aff5ae23b3926d68ecefb38a2a8ab7736` |
+| #2 | `fix/atomic-file-replacement` | `74b345aeaa6c5dbe86032dd9aa875d6376418d5f` |
 | #3 | `fix/current-document-batches` | `69570f64d1a402503a9de6f0ea96b53498fdf318` |
 | #4 | `fix/bridge-json-rpc` | `d9db78c1d28ddcc38144a72de70e0674879322f6` |
 | #5 | `fix/mcp-schema-validation` | `30f6fd28498d1e691669554d6e5f921eed5688fa` |
@@ -31,14 +31,14 @@ Separate target directories avoid sharing Windows/Linux/compiler artifacts.
 | --- | --- | --- |
 | Library, GUI feature enabled | PASS: 144, 1 ignored | PASS: 145, 1 ignored |
 | `zigzag-mcp` | PASS: 3 | PASS: 3 |
-| `zigzag-studio` | PASS: 186, 3 ignored | PASS: 186, 3 ignored |
+| `zigzag-studio` | PASS: 187, 3 ignored | PASS: 187, 3 ignored |
 | `zigzag` CLI | 0 selected, no added coverage | 0 selected, no added coverage |
 
 Commands:
 
 - Windows: `cargo +1.95.0 test --locked --features gui --lib --bins --target-dir target/msrv-1.95 -j 4`.
 - Linux: `cargo test --locked --features gui --lib --bins --target-dir /mnt/h/Code/Rust/zigzag/target/wsl-qualification -j 4`, executed natively in Ubuntu with the repository manifest selected explicitly.
-- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 1bbdb3c; the later product change is confined to GUI-only session code, so this selection is unchanged.
+- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 1bbdb3c; the later product change is confined to GUI-only session/tab code, so this selection is unchanged.
 - Windows GUI/Bluetooth compilation: `cargo +1.95.0 check --locked --features gui,ble --bins --target-dir target/msrv-1.95 -j 4`: PASS.
 - Apple source compilation: the same check with `--target x86_64-apple-darwin`: PASS. This is not linking or execution on a Mac.
 - `git diff 81825c4812a6b9df45880da3a97fc7f63ad4e51b --check`: PASS. Whole-repository formatting drift was previously identified; no broad formatting rewrite is included.
@@ -49,9 +49,9 @@ std-only Rust helper during execution and checks real executable identity, flags
 stdin and streamed results. It does not establish installed-agent interoperability.
 
 Local raw logs and exact command/head receipts are
-`.git/qualification/recovery-integrated-windows.log`, `recovery-integrated-windows.json`,
-`recovery-integrated-linux.log`, `recovery-integrated-linux.json`, `fifo-core.log`,
-`fifo-core.json`, `recovery-gui-ble.*` and `recovery-apple-check.*`. These are local
+`.git/qualification/agent-integrated-windows.log`, `agent-integrated-windows.json`,
+`agent-integrated-linux.log`, `agent-integrated-linux.json`, `fifo-core.log`,
+`fifo-core.json`, `agent-gui-ble.*` and `agent-apple-check.*`. These are local
 working artifacts, not upstream-accessible evidence; the material results are above.
 
 Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
@@ -61,11 +61,11 @@ metadata does not select them as workspace packages.
 
 ## Native macOS persistence qualification
 
-[Run 41041036913](https://github.com/EffortlessSteven/zigzag/actions/runs/41041036913)
+[Run 41045633785](https://github.com/EffortlessSteven/zigzag/actions/runs/41045633785)
 PASS on macOS 15.8.2 ARM64 with Rust 1.95.0: 143 library tests (one existing
-benchmark ignored), plus four GUI-enabled recovery/save tests. This is the clean
-#2 source, not the full integrated fork. Workflow head d33d30e differs from clean
-#2 only by its fork qualification workflow. Both persistence and session source
+benchmark ignored), plus five GUI-enabled recovery/save tests. This is the clean
+#2 source, not the full integrated fork. Workflow head 95fdf36 differs from clean
+#2 only by its fork qualification workflow. Persistence, session and tab source
 blobs match the clean topic exactly; the root Cargo.lock was used unchanged.
 The tests exercise real temporary files, permissions, symlinks, replacement,
 Document saves, injected post-commit recovery warnings, metadata publication,
@@ -74,7 +74,7 @@ Studio suite, interactive GL session, BLE or hardware qualification.
 
 Commands: `cargo +1.95.0 test --locked --lib -- --nocapture` and
 `cargo +1.95.0 test --locked --features gui --bin zigzag-studio recovery_ -- --nocapture`.
-Downloaded environment/results are under `.git/qualification/native-macos-recovery/`.
+Downloaded environment/results are under `.git/qualification/native-macos-state/`.
 The earlier [run 41039769416](https://github.com/EffortlessSteven/zigzag/actions/runs/41039769416)
 also passed the same library selection before the GUI caller repair.
 The workflow is isolated on qualification/macos-persistence and excluded from
@@ -171,8 +171,20 @@ baseline worktree and task-owned vendored locks were removed earlier. The scoped
 license tool cache remains after automatic execution review rejected its removal.
 No unrelated source, credentials or global toolchains were changed by cleanup.
 
-The requested fresh CodeRabbit review of #2 at 77d49f8 completed without
-actionable comments. The new recovery commit and the optional stacked #5 view
-(PR #16, head 49fa259) were requested afterward but hit the one-review-per-hour
-limit. Their independent re-review remains BLOCKED by that external quota;
-requests and prior green checks are not approvals of these latest candidates.
+Two independent read-only agents subsequently reviewed exact candidates. Schema
+stack 49fa259 had no actionable finding; its source/claims, raw 28-test result and
+negative-control proof were inspected without rebuilding. Persistence e5b5d65
+had one source-derived P3: an uncertain committed sidecar was forgotten before
+normal Save cleanup. Owner reproduction failed with `successful Save retained
+recovery`. At 74b345a, an explicit Current/Retry state retains known-file presence
+across failed retries and tab swaps while preserving unknown orphan bytes.
+Metadata-only warnings retain Current; successful retries refresh it. The same
+reviewer examined the repair and found no new actionable issue. Controls for
+indiscriminate deletion and skipped recovery writes both fail; restored tests
+pass. The current local/native qualification above includes this repair.
+
+CodeRabbit reviewed the earlier 77d49f8 without actionable comments. Its later
+requests were rate-limited; no newer CodeRabbit result is claimed. The separate
+agent source/evidence reviews are complete, with scope recorded in
+[final checks](final-checks.md). They do not authorize upstream publication or
+replace native interactive/hardware qualification.
