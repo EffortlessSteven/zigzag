@@ -10,7 +10,7 @@ not a delivery quota or an agreed upstream architecture.
 | Fork PR | Responsibility | Current state |
 | --- | --- | --- |
 | [#1](https://github.com/EffortlessSteven/zigzag/pull/1) | Preserve actual save results through Studio and MCP | Focused tests pass, including real unsaved work; no write-mechanics change. |
-| [#2](https://github.com/EffortlessSteven/zigzag/pull/2) | Stage document state and replace whole files | Stacked on #1; Unix write-access and post-commit identity/recovery findings repaired. Apple sources cross-check; native Mac filesystem qualification remains. |
+| [#2](https://github.com/EffortlessSteven/zigzag/pull/2) | Stage document state and replace whole files | Stacked on #1; Unix write-access, non-regular destination and post-commit identity/recovery findings repaired. Apple sources cross-check; native Mac filesystem qualification remains. |
 | [#3](https://github.com/EffortlessSteven/zigzag/pull/3) | Current-document atomic transactions | Grouping Undo, history-copy cost, deletion names, and reference-bearing static-key checks repaired. |
 | [#4](https://github.com/EffortlessSteven/zigzag/pull/4) | Structured bridge fallback errors | Three tests pass; no claim of running-Studio envelope validation. |
 | [#5](https://github.com/EffortlessSteven/zigzag/pull/5) | Advertised input types without silent defaults | Integral numeric encodings and actual unsaved-file preservation covered; Rust 1.95 tests pass; native Mac execution remains unrun. |
