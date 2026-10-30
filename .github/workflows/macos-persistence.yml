@@ -30,6 +30,7 @@ jobs:
             git rev-parse HEAD
             git rev-parse HEAD:src/file_replace.rs
             git rev-parse HEAD:src/studio/session.rs
+            git rev-parse HEAD:src/studio/tabs.rs
             shasum -a 256 Cargo.lock
             df -h "${TMPDIR:-/tmp}"
           } | tee qualification-results/environment.txt
