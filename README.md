@@ -2,10 +2,15 @@
 
 # ZigZag
 
-SVG → machine embroidery, in Rust. ZigZag is the app (the visual editor);
-`zigzag` is the engine underneath it and its command-line tool (the Rust crate is `zigzag` too). Draw in Illustrator (or let an agent draw),
-pick stitch types in a visual editor, export PES/DST/EXP/JEF/VP3, or send
-straight to a Brother Skitch (PP1) over Bluetooth.
+ZigZag is a visual embroidery editor built in Rust for performance, with
+built-in **MCP (Model Context Protocol)** support so AI agents can create and
+edit designs alongside you. Turn SVG artwork into stitches, fine-tune it in
+the editor, and export **PES, DST, EXP, JEF, or VP3** for broad compatibility
+with embroidery machines—or send designs directly to a **Brother Skitch
+(PP1) over Bluetooth**.
+
+Draw in Illustrator, draw in ZigZag, or let an agent draw. The Rust engine
+and `zigzag` command-line tool power the same workflow outside the editor.
 
 ## Download for Mac
 
