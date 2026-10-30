@@ -638,6 +638,10 @@ fn text_of(r: &ToolResult) -> String {
 /// Refuse arguments a tool doesn't take (a misspelt `widht_mm` would
 /// otherwise be ignored without a word).
 fn check_args(name: &str, args: &Value) -> Result<(), String> {
+    check_arg_names(name, args)
+}
+
+fn check_arg_names(name: &str, args: &Value) -> Result<(), String> {
     static SPECS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
     let specs = SPECS.get_or_init(tool_specs);
     let Some(spec) = specs
@@ -1260,6 +1264,13 @@ impl Studio {
             }
             let empty = json!({});
             let raw = step.get("arguments").unwrap_or(&empty);
+            // References can change values, but not the surrounding keys or
+            // container shape. A whole-object reference is checked at dispatch.
+            if !raw.is_string() || !has_result_reference(raw) {
+                if let Err(error) = check_arg_names(name, raw) {
+                    return Some(format!("step {k} (`{name}`): {error}"));
+                }
+            }
             // Values depending on previous results are validated at dispatch,
             // after resolution. All statically known arguments are checked now.
             if !has_result_reference(raw) {
@@ -2309,25 +2320,31 @@ mod tests {
     #[test]
     fn atomic_batch_rejects_static_argument_errors_before_step_zero() -> anyhow::Result<()> {
         use anyhow::ensure;
-        let mut s = Studio::with_file(None, None);
-        s.replan();
-        let plans = s.replans;
-        let result = s.run_tool(
-            "batch",
-            &json!({"steps": [
-                {"tool": "add_svg", "arguments": {"svg": BADGE}},
-                {"tool": "set_object", "arguments": {"object": 0, "widht_mm": 2}}
-            ]}),
-        );
-        ensure!(result.is_error, "invalid static argument accepted");
-        ensure!(
-            s.replans == plans,
-            "earlier steps ran and triggered rollback planning"
-        );
-        ensure!(
-            s.doc.shapes.is_empty() && s.undo.is_empty(),
-            "preflight changed document/history"
-        );
+        for invalid in [
+            json!({"object": 0, "widht_mm": 2}),
+            json!({"object": "$0.added.0.name", "widht_mm": 2}),
+            json!(["$0.added.0.name"]),
+        ] {
+            let mut s = Studio::with_file(None, None);
+            s.replan();
+            let plans = s.replans;
+            let result = s.run_tool(
+                "batch",
+                &json!({"steps": [
+                    {"tool": "add_svg", "arguments": {"svg": BADGE}},
+                    {"tool": "set_object", "arguments": invalid}
+                ]}),
+            );
+            ensure!(result.is_error, "invalid static argument accepted");
+            ensure!(
+                s.replans == plans,
+                "earlier steps ran and triggered rollback planning"
+            );
+            ensure!(
+                s.doc.shapes.is_empty() && s.undo.is_empty(),
+                "preflight changed document/history"
+            );
+        }
         Ok(())
     }
 

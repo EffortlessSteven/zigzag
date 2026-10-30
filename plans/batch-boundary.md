@@ -72,3 +72,14 @@ end of the shape list. The delete handler now refreshes names via the existing
 `replan_soon` path (cheap/deferred during batching). Regressions cover correct
 survivors, a later failure restoring the original design/history, and a usable
 name-based edit plus Undo after restoration.
+
+Further preflight review: references defer value checks, but object keys and the
+arguments container shape remain statically known. Reproduce a misspelled key
+alongside a nested result reference, and an array containing a result reference;
+both must fail before step zero. Separate name/container checks from full value
+validation so the schema candidate can still accept correctly resolved values.
+Preserve whole-object result references and existing successful batch behavior.
+
+Reference-bearing invalid arguments reproduced execution before rejection.
+After separating static names/shape validation, all 21 standalone MCP tool
+tests PASS (Windows, locked dependencies), including valid reference passing.
