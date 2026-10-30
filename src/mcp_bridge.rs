@@ -70,7 +70,7 @@ fn error_reply(line: &str, message: &str) -> Option<String> {
         Err(_) => return error(Value::Null, -32700, "Parse error"),
     };
     // MCP 2025-06-18 permits one message, string/integer IDs, object params.
-    // Invalid envelopes are not notifications and must not be silently dropped.
+    // Check the message header before classifying request versus notification.
     let valid_id = request.get("id").is_none_or(|id| {
         id.is_string()
             || id.is_i64()
@@ -82,15 +82,20 @@ fn error_reply(line: &str, message: &str) -> Option<String> {
     if !request.is_object()
         || request.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
         || request.get("method").and_then(Value::as_str).is_none()
-        || request
-            .get("params")
-            .is_some_and(|params| !params.is_object())
         || !valid_id
     {
         return error(Value::Null, -32600, "Invalid request for MCP 2025-06-18");
     }
-    // Only a valid request with a top-level ID gets an unavailable-server reply.
-    error(request.get("id")?.clone(), -32000, message)
+    // Notifications never get replies, including parameter-validation errors.
+    // Establish direction before generating parameter-validation replies.
+    let id = request.get("id")?;
+    if request
+        .get("params")
+        .is_some_and(|params| !params.is_object())
+    {
+        return error(Value::Null, -32600, "Invalid request for MCP 2025-06-18");
+    }
+    error(id.clone(), -32000, message)
 }
 
 fn main() {
@@ -220,6 +225,24 @@ mod tests {
             ensure!(
                 result["error"]["code"] == -32700 && result["id"].is_null(),
                 "missing parse error"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bridge_does_not_reply_to_notifications_with_invalid_parameters() -> anyhow::Result<()> {
+        for params in [json!([]), json!(null), json!(3), json!("invalid")] {
+            let notification =
+                json!({"jsonrpc": "2.0", "method": "notifications/initialized", "params": params});
+            ensure!(
+                error_reply(&notification.to_string(), "unavailable").is_none(),
+                "invalid-parameter notification received a reply"
+            );
+            let request = json!({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": params});
+            ensure!(
+                reply(&request.to_string(), "unavailable")?["error"]["code"] == -32600,
+                "request parameter error lost"
             );
         }
         Ok(())
