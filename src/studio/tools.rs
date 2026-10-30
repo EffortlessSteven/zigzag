@@ -1004,6 +1004,7 @@ impl Studio {
                 self.selected = self
                     .selected
                     .filter(|&u| self.doc.shapes.iter().any(|s| s.uid == u));
+                self.replan_soon();
                 Ok(ToolResult::text(format!("Deleted {name}.")))
             }),
             "move_object" => self.resolve(args.get("object")).and_then(|i| {
@@ -2059,6 +2060,115 @@ mod tests {
     use super::*;
     use crate::app::Studio;
     use std::io::{Read, Write};
+
+    fn named_deletion_fixture() -> anyhow::Result<(Studio, Vec<String>)> {
+        use anyhow::{Context, ensure};
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="10mm" viewBox="0 0 60 10"><rect id="A" x="0" width="5" height="5" fill="red"/><rect id="B" x="20" width="5" height="5" fill="blue"/><rect id="C" x="40" width="5" height="5" fill="red"/></svg>"#;
+        let mut studio = Studio::with_file(None, None);
+        studio.set_document(Document::from_svg(svg, "named", None)?);
+        studio.replan();
+        let result = studio.run_tool("get_design", &json!({}));
+        ensure!(!result.is_error, "fixture inspection failed");
+        let design: Value = serde_json::from_str(&text(&result))?;
+        let names = design["objects"]
+            .as_array()
+            .context("objects")?
+            .iter()
+            .map(|object| {
+                object["name"]
+                    .as_str()
+                    .context("object name")
+                    .map(str::to_owned)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        ensure!(names.len() == 3, "fixture needs three distinct names");
+        Ok((studio, names))
+    }
+
+    #[test]
+    fn atomic_delete_then_edit_by_name_targets_the_right_survivor() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let (mut s, names) = named_deletion_fixture()?;
+        let b = s.doc.shapes.get(1).context("B")?.uid;
+        let c = s.doc.shapes.get(2).context("C")?.uid;
+        let result = s.run_tool("batch", &json!({"steps": [
+            {"tool": "delete_object", "arguments": {"object": names.first().context("A name")?}},
+            {"tool": "set_object", "arguments": {"object": names.get(1).context("B name")?, "spacing_mm": 0.6}}
+        ]}));
+        ensure!(!result.is_error, "delete/edit failed: {}", text(&result));
+        ensure!(
+            s.doc
+                .shapes
+                .iter()
+                .find(|shape| shape.uid == b)
+                .context("surviving B")?
+                .params
+                .spacing
+                == Some(0.6),
+            "stale name edited the wrong survivor"
+        );
+        ensure!(
+            s.doc
+                .shapes
+                .iter()
+                .find(|shape| shape.uid == c)
+                .context("surviving C")?
+                .params
+                .spacing
+                .is_none(),
+            "C was edited instead of B"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn atomic_delete_then_delete_by_name_rolls_back_and_remains_usable() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        for fail in [false, true] {
+            let (mut s, names) = named_deletion_fixture()?;
+            s.undo.push(Document::empty());
+            s.redo.push(Document::empty());
+            let before = s.doc.to_svg()?;
+            let mut steps = vec![
+                json!({"tool": "delete_object", "arguments": {"object": names.first().context("A name")?}}),
+                json!({"tool": "delete_object", "arguments": {"object": names.get(2).context("C name")?}}),
+            ];
+            if fail {
+                steps.push(json!({"tool": "set_object", "arguments": {"object": "missing"}}));
+            }
+            let result = s.run_tool("batch", &json!({"steps": steps}));
+            if fail {
+                ensure!(
+                    result.is_error && s.doc.to_svg()? == before,
+                    "failed deletion batch changed the design"
+                );
+                ensure!(
+                    s.undo.len() == 1 && s.redo.len() == 1 && !s.modified,
+                    "original history/modified state lost"
+                );
+                ensure!(
+                    !s.run_tool(
+                        "set_object",
+                        &json!({"object": names.get(1).context("B name")?, "spacing_mm": 0.6})
+                    )
+                    .is_error,
+                    "restored names are unusable"
+                );
+            } else {
+                ensure!(
+                    !result.is_error && s.doc.shapes.len() == 1,
+                    "delete/delete failed"
+                );
+                ensure!(s.names.first() == names.get(1), "wrong survivor");
+            }
+            ensure!(s.apply_history(crate::app::History::Undo), "missing Undo");
+            ensure!(
+                s.doc.to_svg()? == before,
+                "Undo did not restore the complete original design"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn successful_color_grouping_is_modified_and_undoes_the_entire_batch() -> anyhow::Result<()> {

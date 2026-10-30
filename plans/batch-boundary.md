@@ -65,3 +65,10 @@ depending on earlier results remain validated after reference resolution at
 dispatch; failures still roll back the document. This composes with the separate
 schema candidate without coupling this PR to that dependency. MCP tools: 19
 PASS on Windows, locked dependencies. Independent review remains pending.
+
+Further review reproduced deletion followed by name-based editing: the stale
+name cache edited the wrong survivor, and delete/delete by name panicked past the
+end of the shape list. The delete handler now refreshes names via the existing
+`replan_soon` path (cheap/deferred during batching). Regressions cover correct
+survivors, a later failure restoring the original design/history, and a usable
+name-based edit plus Undo after restoration.
