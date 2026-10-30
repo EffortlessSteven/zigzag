@@ -411,7 +411,11 @@ impl AgentState {
             .and_then(|e| e.parent().map(|d| d.join("zigzag-mcp")))
             .filter(|p| p.is_file());
         let url = format!("http://{addr}/mcp");
-        let mut cmd = self.command(program, &url, bridge, addr.port());
+        let cmd = self.command(program, &url, bridge, addr.port());
+        self.start_command(cmd, text, ctx);
+    }
+
+    fn start_command(&mut self, mut cmd: Command, text: String, ctx: &egui::Context) {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1670,59 +1674,91 @@ mod tests {
     }
 
     #[test]
-    fn runs_an_agent_program_and_streams_its_output() {
-        // A stand-in for `claude`: echoes stream-json and checks its stdin.
-        let dir = std::env::temp_dir().join(format!("tl-agent-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let fake = dir.join("claude");
-        std::fs::write(
-            &fake,
-            "#!/bin/sh\nread -r p\necho '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"s1\"}'\n\
-             printf '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"you said %s\"}]}}\\n' \"$p\"\n\
-             echo '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"num_turns\":1,\"duration_ms\":10}'\n",
-        )
-        .unwrap();
-        #[cfg(unix)]
+    fn agent_process_fixture() -> anyhow::Result<()> {
+        use std::io::Read;
+        if std::env::var_os("ZIGZAG_TEST_AGENT_FIXTURE").as_deref()
+            != Some(std::ffi::OsStr::new("1"))
         {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+            return Ok(());
         }
+        let mut prompt = String::new();
+        std::io::stdin().read_to_string(&mut prompt)?;
+        let mut out = std::io::stdout().lock();
+        // Separate JSON from the test harness's own progress output.
+        writeln!(out)?;
+        for event in [
+            serde_json::json!({"type":"system", "subtype":"init", "session_id":"s1"}),
+            serde_json::json!({"type":"assistant", "message":{"content":[{"type":"text", "text":format!("you said {prompt}")} ]}}),
+            serde_json::json!({"type":"result", "subtype":"success", "is_error":false, "num_turns":1, "duration_ms":10}),
+        ] {
+            writeln!(out, "{event}")?;
+            out.flush()?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn runs_an_agent_program_and_streams_its_output() -> anyhow::Result<()> {
+        use anyhow::ensure;
         let mut a = AgentState {
             kind: AgentKind::Claude,
             path: Some(None),
             ..Default::default()
         };
-        // Point find() at the fake through a PATH-less lookup.
-        let program = fake.clone();
-        let mut cmd = a.command(program, "http://127.0.0.1:1/mcp", None, 1);
-        let args: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
-        assert!(args.contains(&"--strict-mcp-config".to_string()));
-        assert!(
-            args.windows(2)
-                .any(|w| w[0] == "--tools" && w[1].is_empty())
+        let program = std::env::current_exe()?;
+        let generated = a.command(program.clone(), "http://127.0.0.1:1/mcp", None, 1);
+        let args: Vec<String> = generated
+            .get_args()
+            .map(|s| s.to_string_lossy().into())
+            .collect();
+        ensure!(
+            args.iter().any(|s| s == "--strict-mcp-config"),
+            "missing strict MCP config"
         );
-        // Run it the way send() does.
+        ensure!(
+            args.windows(2)
+                .any(|w| w.first().is_some_and(|s| s == "--tools")
+                    && w.get(1).is_some_and(String::is_empty)),
+            "built-in tool configuration changed"
+        );
+
+        let mut cmd = Command::new(program);
+        cmd.args([
+            "--exact",
+            "agent::tests::agent_process_fixture",
+            "--nocapture",
+        ])
+        .env("ZIGZAG_TEST_AGENT_FIXTURE", "1");
         let ctx = egui::Context::default();
-        a.prompt = "hello".into();
-        unsafe { std::env::set_var("ZIGZAG_CLAUDE", &fake) };
-        a.send(Some("127.0.0.1:1".parse().unwrap()), &ctx);
-        let _ = &mut cmd;
-        for _ in 0..100 {
+        let prompt = "hello\n\"quoted\" \\ path";
+        a.prompt = prompt.into();
+        a.start_command(cmd, prompt.into(), &ctx);
+        let started = Instant::now();
+        while a.running() {
             a.poll();
-            if !a.running() {
-                break;
+            if started.elapsed() >= Duration::from_secs(10) {
+                a.stop();
+                anyhow::bail!("agent fixture did not finish: {:?}", a.log);
             }
-            std::thread::sleep(std::time::Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(1));
         }
-        assert!(!a.running());
-        assert_eq!(a.session.as_deref(), Some("s1"));
-        assert!(
-            a.log.contains(&Entry::Said("you said hello".into())),
-            "{:?}",
+        ensure!(
+            a.session.as_deref() == Some("s1"),
+            "missing streamed session: {:?}",
             a.log
         );
-        assert!(matches!(a.log.last(), Some(Entry::Done(_))));
-        let _ = std::fs::remove_dir_all(&dir);
+        ensure!(
+            a.log.contains(&Entry::Said(format!("you said {prompt}"))),
+            "stdin/stream roundtrip failed: {:?}",
+            a.log
+        );
+        ensure!(
+            matches!(a.log.last(), Some(Entry::Done(_))),
+            "missing completion: {:?}",
+            a.log
+        );
+        ensure!(a.prompt.is_empty(), "submitted prompt was not cleared");
+        Ok(())
     }
 
     fn studio() -> egui_kittest::Harness<'static, Studio> {
