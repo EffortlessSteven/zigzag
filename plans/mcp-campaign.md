@@ -104,6 +104,12 @@ renderer, replacing the initial hand-added notice. Lock fingerprint matches.
 The installed 0.6.4 tool cannot accept `--offline` or the existing Ubuntu SPDX
 identifier; it was left untouched. No Mac application build is claimed.
 
+Additional metadata review preserves standard new-file Unix permissions
+(`0666 & umask`) instead of silently giving new documents tempfile's private
+mode. Existing destinations retain their basic permissions. A Unix comparison
+test against ordinary file creation was added but is NOT RUN on this Windows
+host. Windows replacement tests remain PASS (3).
+
 ## Revised campaign contract
 
 The numbered rows are an investigation inventory, not eleven commitments.

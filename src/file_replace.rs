@@ -46,9 +46,16 @@ fn replace_with_sync(
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let mut temporary = tempfile::Builder::new()
-        .prefix(".zigzag-")
-        .tempfile_in(parent)?;
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".zigzag-");
+    #[cfg(unix)]
+    if permissions.is_none() {
+        // Match File::create for new documents/exports, including the umask.
+        // Existing files stay private while preparing and get their old mode.
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o666));
+    }
+    let mut temporary = builder.tempfile_in(parent)?;
     write(temporary.as_file_mut())?;
     temporary.flush()?;
     if let Some(permissions) = permissions {
@@ -150,6 +157,15 @@ mod tests {
     fn replacement_preserves_mode_and_symlink_target() -> anyhow::Result<()> {
         use std::os::unix::fs::{PermissionsExt, symlink};
         let dir = tempfile::tempdir()?;
+        let reference = dir.path().join("reference");
+        let new = dir.path().join("new.svg");
+        std::fs::write(&reference, b"reference")?;
+        replace_file_atomic(&new, |file| file.write_all(b"new"))?;
+        ensure!(
+            std::fs::metadata(&new)?.permissions().mode() & 0o777
+                == std::fs::metadata(&reference)?.permissions().mode() & 0o777,
+            "new file mode differs from standard creation"
+        );
         let path = dir.path().join("target.svg");
         let link = dir.path().join("link.svg");
         std::fs::write(&path, b"old")?;
