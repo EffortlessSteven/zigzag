@@ -336,15 +336,17 @@ impl Document {
             Some(p) => p.to_path_buf(),
             None => bail!("no file name yet; use Save As"),
         };
-        self.sync()?;
-        replace(&path, self.xml.as_bytes()).with_context(|| format!("writing {}", path.display()))?;
-        if self.path.as_deref() != Some(path.as_path()) {
-            self.name = path
+        let mut prepared = self.clone();
+        prepared.sync()?;
+        replace(&path, prepared.xml.as_bytes()).with_context(|| format!("writing {}", path.display()))?;
+        if prepared.path.as_deref() != Some(path.as_path()) {
+            prepared.name = path
                 .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            self.path = Some(path.clone());
+            prepared.path = Some(path.clone());
         }
+        *self = prepared;
         Ok(path)
     }
 
@@ -785,6 +787,9 @@ mod tests {
         let path = dir.path().join("new.svg");
         std::fs::write(&path, b"original")?;
         let mut document = super::Document::empty();
+        document.settings.fabric = "thin-cap".into();
+        let old_xml = document.xml.clone();
+        let old_revision = document.rev();
         let old_path = document.path.clone();
         let old_name = document.name.clone();
         let result = document.save_with(Some(&path), |path, _| {
@@ -794,6 +799,7 @@ mod tests {
             })
         });
         ensure!(result.is_err(), "partial write succeeded");
+        ensure!(document.xml == old_xml && document.rev() == old_revision, "failed save normalized the live document");
         ensure!(document.path == old_path && document.name == old_name, "identity changed on failure");
         ensure!(std::fs::read(&path)? == b"original", "original truncated");
         ensure!(std::fs::read_dir(dir.path())?.count() == 1, "temporary leaked");

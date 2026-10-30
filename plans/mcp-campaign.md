@@ -77,3 +77,24 @@ promoting the locked transitive dependency adds no package versions. Added its M
 `THIRD-PARTY-NOTICES.md`. Mac/Unix execution and power-loss tests
 are NOT RUN. Parent-directory sync errors after rename report a durability
 failure; they cannot roll back an already committed filesystem replacement.
+
+Review correction: a new regression reproduced in-memory normalization on a
+failed save in the first candidate. Save now serializes a cloned document and
+commits normalization/identity only after persistence succeeds. Windows focused
+document test and shared replacement tests PASS. An injected post-commit sync
+failure confirms new bytes remain visible and the error explicitly reports that
+commit. Basic permissions are copied; existing symlinks resolve to their target,
+and dangling links fail before writing. Unix mode/symlink test is NOT RUN here.
+ACLs, ownership, extended metadata, hard-link identity and unusual/network
+filesystem behavior remain qualification gaps; this is not universal durability.
+
+## Revised campaign contract
+
+The numbered rows are an investigation inventory, not eleven commitments.
+Every finding may be fixed, narrowed or ruled out. All work stays on this fork;
+upstream submission requires Steven's explicit word after review. Independent
+review is pending. Upstream packages should omit fork-only campaign machinery.
+Preserve useful authorized tracing/export workflows when designing embedded
+authority; nested dispatch must inherit grants. Client flags alone are not a
+server authorization boundary. Authentication and document targeting need
+explicit workflow decisions. Queued timeout/cancellation is a separate candidate.
