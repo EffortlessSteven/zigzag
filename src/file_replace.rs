@@ -40,7 +40,8 @@ pub fn replacement_committed(error: &io::Error) -> bool {
 /// error happens after commit: the new bytes are visible but durability is not
 /// confirmed. Directory syncing is unavailable on Windows.
 /// Existing symlinks are followed (dangling links fail); basic permissions are
-/// copied. Replacement creates a new inode/file: ownership, ACLs, hard links,
+/// copied. Existing non-regular targets are rejected before opening them.
+/// Replacement creates a new inode/file: ownership, ACLs, hard links,
 /// extended metadata and unusual/network filesystem guarantees are not preserved
 /// or qualified here.
 pub fn replace_file_atomic(
@@ -70,6 +71,14 @@ fn replace_with_sync(
     };
     let permissions = match std::fs::metadata(destination) {
         Ok(metadata) => {
+            // Atomic replacement is a whole-file operation, not a stream write.
+            // Reject special files before opening them (a FIFO open may block).
+            if !metadata.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "atomic replacement destination must be a regular file",
+                ));
+            }
             // Rename needs directory access, but must not bypass the existing
             // file's write check. Do not truncate, and release before replacing.
             drop(std::fs::OpenOptions::new().write(true).open(destination)?);
@@ -133,6 +142,84 @@ fn sync_parent(parent: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     use anyhow::ensure;
+
+    #[test]
+    fn non_file_destination_is_rejected_before_writing() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let destination = dir.path().join("directory.svg");
+        std::fs::create_dir(&destination)?;
+        let mut wrote = false;
+        let result = replace_file_atomic(&destination, |_| {
+            wrote = true;
+            Ok(())
+        });
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("directory accepted"))?;
+        ensure!(
+            error.kind() == io::ErrorKind::InvalidInput,
+            "wrong target-kind error: {error}"
+        );
+        ensure!(!wrote && destination.is_dir(), "destination was touched");
+        ensure!(
+            std::fs::read_dir(dir.path())?.count() == 1,
+            "temporary leaked"
+        );
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn named_pipe_and_symlink_target_are_preserved() -> anyhow::Result<()> {
+        use std::os::unix::fs::{FileTypeExt, symlink};
+        for linked in [false, true] {
+            let dir = tempfile::tempdir()?;
+            let pipe = dir.path().join("output.svg");
+            let status = std::process::Command::new("mkfifo").arg(&pipe).status()?;
+            ensure!(status.success(), "mkfifo failed");
+            // Linux permits O_RDWR on a FIFO without another peer. Keep both
+            // ends open so even the old write-access probe cannot block.
+            let _peer = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&pipe)?;
+            let link = dir.path().join("link.svg");
+            let destination = if linked {
+                symlink(&pipe, &link)?;
+                &link
+            } else {
+                &pipe
+            };
+            let mut wrote = false;
+            let result = replace_file_atomic(destination, |file| {
+                wrote = true;
+                file.write_all(b"replacement")
+            });
+            let error = result
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("FIFO accepted (symlink={linked})"))?;
+            ensure!(
+                error.kind() == io::ErrorKind::InvalidInput,
+                "wrong target-kind error: {error}"
+            );
+            ensure!(!wrote, "writer ran for special destination");
+            ensure!(
+                std::fs::symlink_metadata(&pipe)?.file_type().is_fifo(),
+                "FIFO was replaced"
+            );
+            if linked {
+                ensure!(
+                    std::fs::symlink_metadata(&link)?.file_type().is_symlink(),
+                    "link was replaced"
+                );
+            }
+            ensure!(
+                std::fs::read_dir(dir.path())?.count() == if linked { 2 } else { 1 },
+                "temporary leaked"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn replacement_respects_the_operating_system_write_check() -> anyhow::Result<()> {
