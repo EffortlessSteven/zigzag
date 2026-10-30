@@ -53,3 +53,12 @@ edit. Numeric and explicit-null Save As paths return tool errors before saving;
 original disk bytes, live serialized work, identity, stable state and Undo length
 remain intact. This is the schema candidate's boundary, not a reason to widen
 the separate save-result PR. Focused Windows regression PASS.
+
+Composition review: carry the names/value separation in this topic itself,
+using the same pure names/container checker and cached catalog as #3. Full
+schema validation remains in check_args after normalization, not the preflight
+helper. Carry the numeric-reference workflow regression here and assert that the
+resolved number actually reaches the object, as well as preserving one Undo.
+A raw merge of the two topic heads must pass without relying on afaa940 from the
+campaign branch. The test is preservation coverage in isolation and discriminates
+premature validation when combined with #3.
