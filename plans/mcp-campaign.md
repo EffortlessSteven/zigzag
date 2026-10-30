@@ -162,3 +162,13 @@ live artwork, Undo history and original disk bytes as well as stable identity
 and error status. Both focused save tests PASS on Windows with locked inputs.
 Normalization staging belongs to the separate persistence candidate; this test
 compares represented design, not raw pre-save XML or revision allocation.
+
+Fresh #2 review: existing non-regular destinations can be replaced by a regular
+file. Reject the resolved target unless it is a regular file before opening it
+for the write-access probe. Add a common directory rejection check and a bounded
+Linux FIFO regression for both direct paths and symlink targets. Keep the FIFO
+open read/write on Linux so the old probe cannot block; no reader thread or sleep
+is needed. Require InvalidInput, unchanged target kind, no callback and no temp
+leak. Exercise the regression against the old helper before changing it, then run
+neighboring persistence/save/export checks. Carry the fix into the clean #2
+candidate and integrated fork without rewriting published history.
