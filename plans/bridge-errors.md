@@ -29,3 +29,9 @@ Numeric-encoding review: a whole decimal encoding (`17.0`) is an integer value,
 not a fractional ID. Added a round-trip test that initially failed the new
 envelope check; corrected it to accept whole numeric values while still rejecting
 `1.5`. The value is serialized unchanged rather than coerced into another ID.
+
+Notification review: invalid parameters previously produced a response even
+when a recognized notification envelope had no ID. The new test reproduces
+that response, then verifies suppression for array/null/scalar parameters while
+the equivalent requests still receive their invalid-request errors. Notification
+direction is now checked before parameter validation.
