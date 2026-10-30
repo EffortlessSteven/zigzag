@@ -650,12 +650,19 @@ fn unsigned_integer(value: &Value) -> Option<u64> {
 /// Refuse arguments a tool doesn't take (a misspelt `widht_mm` would
 /// otherwise be ignored without a word).
 fn check_args(name: &str, args: &Value) -> Result<(), String> {
-    check_arg_names(name, args)
+    check_arg_names(name, args)?;
+    let empty = json!({});
+    let args = if args.is_null() { &empty } else { args };
+    crate::tool_args::validate(name, args, argument_specs())
+}
+
+fn argument_specs() -> &'static Value {
+    static SPECS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    SPECS.get_or_init(tool_specs)
 }
 
 fn check_arg_names(name: &str, args: &Value) -> Result<(), String> {
-    static SPECS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
-    let specs = SPECS.get_or_init(tool_specs);
+    let specs = argument_specs();
     let Some(spec) = specs
         .as_array()
         .and_then(|a| a.iter().find(|t| t["name"] == name))
@@ -671,7 +678,7 @@ fn check_arg_names(name: &str, args: &Value) -> Result<(), String> {
     let known = |k: &str| props.is_some_and(|p| p.contains_key(k));
     let unknown: Vec<&String> = obj.keys().filter(|k| !known(k)).collect();
     if unknown.is_empty() {
-        return crate::tool_args::validate(name, args, specs);
+        return Ok(());
     }
     let mut expected: Vec<&String> = props.map(|p| p.keys().collect()).unwrap_or_default();
     expected.sort();
@@ -2083,6 +2090,20 @@ impl Studio {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn integrated_batch_validates_numeric_references_after_resolution() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        let result = s.run_tool("batch", &json!({"steps": [
+            {"tool": "add_svg", "arguments": {"svg": BADGE}},
+            {"tool": "get_design", "arguments": {}},
+            {"tool": "set_object", "arguments": {"object": 0, "angle": "$1.stats.width_mm"}}
+        ]}));
+        ensure!(!result.is_error, "valid resolved numeric argument rejected: {}", text_of(&result));
+        ensure!(s.undo.len() == 1, "reference batch lost its one-step Undo");
+        Ok(())
+    }
+
     use super::*;
     use crate::app::Studio;
     use std::io::{Read, Write};
