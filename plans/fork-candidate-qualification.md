@@ -1,7 +1,7 @@
 # Fork candidate qualification
 
 Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
-Tested combined code/fixture head: `d4171921f3a566ffbd144a35ca0583aa20998a3e`. Later changes are documentation
+Tested combined code/fixture head: `74058d8edf50d3fd8f60663f6a006fa3b320bfb7`. Later changes are documentation
 only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
 No upstream submission, fork-main merge, release or hardware qualification is
 claimed. These are open candidates, not a required count of contributions.
@@ -10,14 +10,14 @@ claimed. These are open candidates, not a required count of contributions.
 | --- | --- | --- |
 | #1 | `fix/mcp-save-result` | `4dd38e2c79cbc40ce699db34265b3617449e1e14` |
 | #2 | `fix/atomic-file-replacement` | `74b345aeaa6c5dbe86032dd9aa875d6376418d5f` |
-| #3 | `fix/current-document-batches` | `69570f64d1a402503a9de6f0ea96b53498fdf318` |
+| #3 | `fix/current-document-batches` | `f67a48e0413d1df63776f75b518065e5e16d716f` |
 | #4 | `fix/bridge-json-rpc` | `d9db78c1d28ddcc38144a72de70e0674879322f6` |
 | #5 | `fix/mcp-schema-validation` | `30f6fd28498d1e691669554d6e5f921eed5688fa` |
 | #6 | `fix/mcp-expired-calls` | `920951104473f9987c4911730dca86621bb124ce` |
 | #7 | `docs/skitch-qualification` | `430a2695fbb1b642728d829059645872f39aa3d2` |
 | #8 | `test/vendored-geometry` | `3ac4f3affb06323743a33cea8e70c551a6621dc1` |
 | #12 | `fix/ui-worker-test-completion` | `eb5af9b17b55722751fe828dcc66d6c3d080e30c` |
-| #13 | `test/portable-agent-process` | `4e078fcbd840b00a4e05c11f3e0543b183558053` |
+| #13 | `test/portable-agent-process` | `6d4286546cc326110fe19f0d89ac66f1b9945a1d` |
 | #14 | `test/manual-simulator-clock` | `3b2aba6f390b1c0a0c6877d7e412a798420dbecf` |
 | #15 | `test/session-writer-completion` | `b187d9a8e42772bda2b5ede000d5512ed514685c` |
 
@@ -31,14 +31,14 @@ Separate target directories avoid sharing Windows/Linux/compiler artifacts.
 | --- | --- | --- |
 | Library, GUI feature enabled | PASS: 144, 1 ignored | PASS: 145, 1 ignored |
 | `zigzag-mcp` | PASS: 3 | PASS: 3 |
-| `zigzag-studio` | PASS: 187, 3 ignored | PASS: 187, 3 ignored |
+| `zigzag-studio` | PASS: 188, 3 ignored | PASS: 188, 3 ignored |
 | `zigzag` CLI | 0 selected, no added coverage | 0 selected, no added coverage |
 
 Commands:
 
 - Windows: `cargo +1.95.0 test --locked --features gui --lib --bins --target-dir target/msrv-1.95 -j 4`.
 - Linux: `cargo test --locked --features gui --lib --bins --target-dir /mnt/h/Code/Rust/zigzag/target/wsl-qualification -j 4`, executed natively in Ubuntu with the repository manifest selected explicitly.
-- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 1bbdb3c; the later product change is confined to GUI-only session/tab code, so this selection is unchanged.
+- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 1bbdb3c; the later changes are confined to GUI-only Studio code/tests, so this selection is unchanged.
 - Windows GUI/Bluetooth compilation: `cargo +1.95.0 check --locked --features gui,ble --bins --target-dir target/msrv-1.95 -j 4`: PASS.
 - Apple source compilation: the same check with `--target x86_64-apple-darwin`: PASS. This is not linking or execution on a Mac.
 - `git diff 81825c4812a6b9df45880da3a97fc7f63ad4e51b --check`: PASS. Whole-repository formatting drift was previously identified; no broad formatting rewrite is included.
@@ -49,9 +49,9 @@ std-only Rust helper during execution and checks real executable identity, flags
 stdin and streamed results. It does not establish installed-agent interoperability.
 
 Local raw logs and exact command/head receipts are
-`.git/qualification/agent-integrated-windows.log`, `agent-integrated-windows.json`,
-`agent-integrated-linux.log`, `agent-integrated-linux.json`, `fifo-core.log`,
-`fifo-core.json`, `agent-gui-ble.*` and `agent-apple-check.*`. These are local
+`.git/qualification/corrections-windows.log`, `corrections-windows.json`,
+`corrections-linux.log`, `corrections-linux.json`, `fifo-core.log`,
+`fifo-core.json`, `corrections-gui-ble.*` and `corrections-apple-check.*`. These are local
 working artifacts, not upstream-accessible evidence; the material results are above.
 
 Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
@@ -216,3 +216,11 @@ requests were rate-limited; no newer CodeRabbit result is claimed. The separate
 agent source/evidence reviews are complete, with scope recorded in
 [final checks](final-checks.md). They do not authorize upstream publication or
 replace native interactive/hardware qualification.
+
+## Final scoped corrections
+
+[Final corrections](final-corrections.md) records #3 final-plan reuse and #13
+fixture completion proof, their independent reviews and discriminating controls.
+The fresh full runs above cover both. Preferred schema stack 589cf50 passes all
+29 tool tests and retains both composition regressions. Earlier direct-merge
+results earlier in this record describe their historical candidates, not the current stack.

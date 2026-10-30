@@ -9,9 +9,10 @@ without fork plans or campaign history. The baseline is
 
 Read-only upstream check confirmed main still at the baseline above. Every row
 has an identical complete tree outside plans/ to its source topic. No code,
-tests, notices, lockfiles or fixtures were removed. Each prepare/ branch has one
-contribution commit except #2, which has the necessary clean #1 base and
-follow-up commits repairing special-file rejection and recovery metadata outcomes.
+tests, notices, lockfiles or fixtures were removed. Clean branches carry focused
+contribution commits and necessary follow-ups;
+#2 includes the clean #1 dependency, while #3 and #13 include their final narrow
+corrections.
 Shared history was not rewritten. The working topics and fork PRs are preserved.
 All branches below are pushed only to the fork.
 
@@ -19,14 +20,14 @@ All branches below are pushed only to the fork.
 | --- | --- | --- |
 | #1 | [prepare/mcp-save-result](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-save-result) | `d0654f6c400cf66a18ecd41a98dd28a2cf4407fe` |
 | #2 | [prepare/atomic-file-replacement](https://github.com/EffortlessSteven/zigzag/tree/prepare/atomic-file-replacement) | `54e15e49a2ca16df66e88c8c9ac15d638329df7a` |
-| #3 | [prepare/current-document-batches](https://github.com/EffortlessSteven/zigzag/tree/prepare/current-document-batches) | `a17d2e3851117b3e40dd72757faca4a04faba42f` |
+| #3 | [prepare/current-document-batches](https://github.com/EffortlessSteven/zigzag/tree/prepare/current-document-batches) | `f758277802df8e57b24f756c0d3031565c9dd5ff` |
 | #4 | [prepare/bridge-json-rpc](https://github.com/EffortlessSteven/zigzag/tree/prepare/bridge-json-rpc) | `c9f67b581855b0a222a53085c7451a768c557fa9` |
 | #5 | [prepare/mcp-schema-validation](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-schema-validation) | `4d3b01f4bdd43c8212b1f41cfbc653f854733775` |
 | #6 | [prepare/mcp-expired-calls](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-expired-calls) | `9ca68dacfe7729a931d09fb8e073f7ab177e6243` |
 | #7 | [docs/skitch-qualification](https://github.com/EffortlessSteven/zigzag/tree/docs/skitch-qualification) | `430a2695fbb1b642728d829059645872f39aa3d2` |
 | #8 | [test/vendored-geometry](https://github.com/EffortlessSteven/zigzag/tree/test/vendored-geometry) | `3ac4f3affb06323743a33cea8e70c551a6621dc1` |
 | #12 | [prepare/ui-worker-test-completion](https://github.com/EffortlessSteven/zigzag/tree/prepare/ui-worker-test-completion) | `0ace88ce8178f6b4f269a730d790d823ba56040f` |
-| #13 | [prepare/portable-agent-process](https://github.com/EffortlessSteven/zigzag/tree/prepare/portable-agent-process) | `d565f078d0edfd83d8cddd3ae6ecbfc7dbf067f5` |
+| #13 | [prepare/portable-agent-process](https://github.com/EffortlessSteven/zigzag/tree/prepare/portable-agent-process) | `558bf9e90eb211798cc31f99a20da4494a52a1c0` |
 | #14 | [prepare/manual-simulator-clock](https://github.com/EffortlessSteven/zigzag/tree/prepare/manual-simulator-clock) | `a0c483861c9cea91a3fe72892d2064daa88da0e0` |
 | #15 | [prepare/session-writer-completion](https://github.com/EffortlessSteven/zigzag/tree/prepare/session-writer-completion) | `4e1ef2a1235674be1dc02dfd8f7441923049ec0d` |
 
@@ -64,36 +65,21 @@ explanation, and reconcile any claim affected by the selected candidate. Keep
 this preparation record and all campaign plans out of the submitted diff.
 Independent review remains independent work, not something supplied by extraction.
 
-## Optional schema topic stacked on batching
+## Preferred schema topic stacked on batching
 
 Review 5710300411 identified an integration-only regression omitted from the
-initial clean #3/#5 combination. It is now preserved in
-[prepare/schema-after-batches](https://github.com/EffortlessSteven/zigzag/tree/prepare/schema-after-batches)
-at `49fa25905d52e5f3b46aac3c2c0fa9a505710eb6`, based on clean #3. The standalone #3 and #5
-branches remain available independently; this is an optional submission order,
-not another contribution or a dependency forced onto standalone validation.
+initial clean combination. It is preserved in prepare/schema-after-batches (#16),
+now 589cf50ccfdbdbfe7ef8efd1df86050eea18c03c over repaired clean #3 f758277.
+Both composition regressions and the final-plan reuse regression remain present.
+All 29 MCP tool tests pass on Windows Rust 1.95. Exact-head proof is local
+.git/qualification/final-schema-stack.json. Earlier stacked-schema receipts
+retain the historical 49fa259/28-test packaging and mutation controls.
 
-The complete product tree matches direct composition 6b35cab plus exactly the
-existing 23-line integrated_schemas_reject_static_batch_input_before_any_edit test.
-No production change or fork plan was added. Windows Rust 1.95 MCP tool selection
-passes all 28 tests. Replacing full static preflight with name-only validation
-fails `static type error admitted earlier edits`, so rollback cannot conceal
-execution. Restoring the source passes all 28 again. The broader integrated
-source already contains this test and is unchanged by this packaging work.
-
-Local proof is in `.git/qualification/stacked-schema*.json` and logs. No fresh
-Linux standalone run is claimed. Preserve this stacked test when selecting both
-contributions; its preflight guarantee depends on their combined behavior.
-
-The optional stack has a draft fork review view, [#16](https://github.com/EffortlessSteven/zigzag/pull/16).
-It is an alternate view of #5, not a thirteenth contribution. Independent agent
-review of 49fa259 found no actionable issue. The persistence reviewer found a
-cleanup gap at e5b5d65; the owner reproduced it and the reviewer verified the
-Current/Retry repair at 74b345a. Current qualification includes both that repair
-and native Mac Save-after-warning cleanup. CodeRabbit-specific requests remain
-rate-limited; that is separate from the completed independent agent reviews.
-Steven accepted the jsonschema choice; no bespoke validator rewrite or unmeasured
-dependency-cost claim is implied.
+Clean #13 558bf9e includes the completion witness; positive agent tests pass and
+both false-success controls fail. See [final corrections](final-corrections.md).
+Product trees match their source topics outside plans/. No history was rewritten.
+Use #16 for the schema contribution once; standalone #5 remains a fallback.
+Nothing has been submitted upstream.
 
 ## Persistence cost and simplicity review
 
