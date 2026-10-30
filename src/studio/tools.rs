@@ -2900,7 +2900,16 @@ mod tests {
             std::fs::write(&blocker, b"not a directory")?;
             let invalid = blocker.join("failed.svg");
             for modified in [false, true] {
-                s.modified = modified;
+                if modified {
+                    let edit = s.run_tool("set_object", &json!({"object": 0, "angle": 43}));
+                    ensure!(
+                        !edit.is_error && s.modified,
+                        "fixture needs a real unsaved edit"
+                    );
+                }
+                let live_svg = s.doc.to_svg()?;
+                let history = s.undo.len();
+                let saved_bytes = std::fs::read(&path)?;
                 let old_path = s.doc.path.clone();
                 let old_name = s.doc.name.clone();
                 let stable_xml = s.stable.xml.clone();
@@ -2910,6 +2919,14 @@ mod tests {
                 ensure!(s.modified == modified, "failure changed modified state");
                 ensure!(s.doc.path == old_path && s.doc.name == old_name, "failure changed identity");
                 ensure!(s.stable.xml == stable_xml, "failure changed stable document");
+                ensure!(
+                    s.doc.to_svg()? == live_svg && s.undo.len() == history,
+                    "failed save lost design work or history"
+                );
+                ensure!(
+                    std::fs::read(&path)? == saved_bytes,
+                    "failed Save As changed the original file"
+                );
                 ensure!(!s.dirty, "failure changed dirty state");
                 ensure!(s.status.starts_with("Couldn't save:"), "missing UI failure status");
             }

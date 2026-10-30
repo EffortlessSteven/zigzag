@@ -156,3 +156,9 @@ restore_sent assertion). Exact isolated retry PASS. This repeats the unresolved
 session/simulator intermittency tracked in fork issue #9; do not classify the
 suite as green or claim a proven root cause. Raw current-run logs are retained
 under .git/qualification/persistence-*.log (local evidence, not upstream files).
+Save-result preservation review: the modified failure case now performs an
+actual unsaved object edit rather than assigning the flag. It checks serialized
+live artwork, Undo history and original disk bytes as well as stable identity
+and error status. Both focused save tests PASS on Windows with locked inputs.
+Normalization staging belongs to the separate persistence candidate; this test
+compares represented design, not raw pre-save XML or revision allocation.
