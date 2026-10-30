@@ -669,10 +669,12 @@ fn check_arg_names(name: &str, args: &Value) -> Result<(), String> {
     else {
         return Ok(()); // unknown tools are reported by run_tool
     };
-    let empty = json!({});
-    let args = if args.is_null() { &empty } else { args };
     let Some(obj) = args.as_object() else {
-        return Err(format!("{name}: arguments must be an object"));
+        return if args.is_null() {
+            Ok(())
+        } else {
+            Err(format!("{name}: arguments must be an object"))
+        };
     };
     let props = spec["inputSchema"]["properties"].as_object();
     let known = |k: &str| props.is_some_and(|p| p.contains_key(k));
@@ -2092,7 +2094,7 @@ impl Studio {
 mod tests {
     #[test]
     fn integrated_batch_validates_numeric_references_after_resolution() -> anyhow::Result<()> {
-        use anyhow::ensure;
+        use anyhow::{Context, ensure};
         let mut s = Studio::with_file(None, None);
         let result = s.run_tool("batch", &json!({"steps": [
             {"tool": "add_svg", "arguments": {"svg": BADGE}},
@@ -2101,6 +2103,12 @@ mod tests {
         ]}));
         ensure!(!result.is_error, "valid resolved numeric argument rejected: {}", text_of(&result));
         ensure!(s.undo.len() == 1, "reference batch lost its one-step Undo");
+        let report: Value = serde_json::from_str(&text_of(&result))?;
+        let width = report.pointer("/results/1/result/stats/width_mm")
+            .and_then(Value::as_f64).context("reported width")?;
+        let angle = s.doc.shapes.first().and_then(|shape| shape.params.angle)
+            .context("resolved numeric angle was ignored")?;
+        ensure!((angle - width).abs() < 1e-9, "resolved value did not reach the handler");
         Ok(())
     }
 
@@ -2586,28 +2594,6 @@ mod tests {
     }
 
     #[test]
-    fn every_exposed_tool_has_effects_and_batch_hints_are_conservative() -> anyhow::Result<()> {
-        use anyhow::{Context, ensure};
-        let specs = tool_specs();
-        for spec in specs.as_array().context("tool array")? {
-            let name = spec["name"].as_str().context("tool name")?;
-            ensure!(tool_policy(name).is_some(), "missing policy: {name}");
-            if name == "batch" {
-                ensure!(
-                    spec["annotations"]
-                        == json!({"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true}),
-                    "unsafe batch hints"
-                );
-            }
-        }
-        ensure!(tool_policy("unknown").is_none(), "unknown tool classified");
-        Ok(())
-    }
-
-
-
-
-    #[test]
     fn invalid_save_paths_preserve_disk_and_real_unsaved_edits() -> anyhow::Result<()> {
         use anyhow::ensure;
         let stamp = std::time::SystemTime::now()
@@ -2777,6 +2763,25 @@ mod tests {
                 text(&result)
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn every_exposed_tool_has_effects_and_batch_hints_are_conservative() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let specs = tool_specs();
+        for spec in specs.as_array().context("tool array")? {
+            let name = spec["name"].as_str().context("tool name")?;
+            ensure!(tool_policy(name).is_some(), "missing policy: {name}");
+            if name == "batch" {
+                ensure!(
+                    spec["annotations"]
+                        == json!({"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true}),
+                    "unsafe batch hints"
+                );
+            }
+        }
+        ensure!(tool_policy("unknown").is_none(), "unknown tool classified");
         Ok(())
     }
 
