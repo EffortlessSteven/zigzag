@@ -641,9 +641,13 @@ fn check_args(name: &str, args: &Value) -> Result<(), String> {
     check_arg_names(name, args)
 }
 
-fn check_arg_names(name: &str, args: &Value) -> Result<(), String> {
+fn argument_specs() -> &'static Value {
     static SPECS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
-    let specs = SPECS.get_or_init(tool_specs);
+    SPECS.get_or_init(tool_specs)
+}
+
+fn check_arg_names(name: &str, args: &Value) -> Result<(), String> {
+    let specs = argument_specs();
     let Some(spec) = specs
         .as_array()
         .and_then(|a| a.iter().find(|t| t["name"] == name))

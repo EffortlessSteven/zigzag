@@ -83,3 +83,10 @@ Preserve whole-object result references and existing successful batch behavior.
 Reference-bearing invalid arguments reproduced execution before rejection.
 After separating static names/shape validation, all 21 standalone MCP tool
 tests PASS (Windows, locked dependencies), including valid reference passing.
+
+Composition review: schema checking must never migrate into check_arg_names,
+which atomic preflight calls before resolving references. Share a cached catalog
+accessor with the schema topic and keep the names/container checker identical
+and value-independent in both. The schema topic carries the full validator only
+in check_args, plus the valid numeric-reference regression. Prove the actual
+normal merge of the two topic heads, not only the earlier integrated branch.
