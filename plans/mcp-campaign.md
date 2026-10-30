@@ -1,164 +1,47 @@
-# MCP reliability campaign
+# ZigZag fork campaign
 
-Destination: `EffortlessSteven/zigzag` (fork). Do not submit upstream PRs.
-The numbered inventory below is an investigation map, not eleven commitments.
-Reproduce, narrow or reject findings; choose contribution boundaries from proof.
-Steven explicitly decides any upstream submission after review. No release
-publishing or hardware qualification is authorized by this plan. Keep internal
-campaign context on the fork; extract clean upstream candidates only later.
+All development and review stays in EffortlessSteven/zigzag. Steven must explicitly
+authorize any upstream submission. No upstream PR, issue, merge or release is part
+of this lane. The original numbered suggestions are an investigation inventory,
+not a delivery quota or an agreed upstream architecture.
 
-| Slice | Seam | Dependencies | State |
-| --- | --- | --- | --- |
-| 1 | Propagate save failures through MCP | none | verified; fork PR pending |
-| 2 | Atomic document and export replacement | 1 | pending |
-| 3 | Current-document atomic batches and shared tool policy | none | pending |
-| 4 | Design-only embedded agent capabilities | 3 | pending |
-| 5 | JSON-RPC bridge error serialization | none | pending |
-| 6 | Advertised input schema enforcement | none | pending; supplied detail ends mid-spec |
-| 7 | Loopback transport hardening | 5 | pending; detailed criteria needed |
-| 8 | Engine, studio, feature and vendored CI | none | pending; detailed criteria needed |
-| 9 | Locked and recorded Mac release inputs | 8 desirable | pending; detailed criteria needed |
-| 10 | Qualify unvalidated Skitch support claims | human qualification | pending |
-| 11 | Modern and legacy MCP protocol support | 7 | pending; detailed criteria needed |
+## Current candidates
 
-## Slice 1 verified plan
+| Fork PR | Responsibility | Current state |
+| --- | --- | --- |
+| [#1](https://github.com/EffortlessSteven/zigzag/pull/1) | Preserve actual save results through Studio and MCP | Focused tests pass, including real unsaved work; no write-mechanics change. |
+| [#2](https://github.com/EffortlessSteven/zigzag/pull/2) | Stage document state and replace whole files | Stacked on #1; Unix write-access and post-commit identity/recovery findings repaired. Mac remains unqualified. |
+| [#3](https://github.com/EffortlessSteven/zigzag/pull/3) | Current-document atomic transactions | Grouping Undo, history-copy cost, deletion names, and reference-bearing static-key checks repaired. |
+| [#4](https://github.com/EffortlessSteven/zigzag/pull/4) | Structured bridge fallback errors | Three tests pass; no claim of running-Studio envelope validation. |
+| [#5](https://github.com/EffortlessSteven/zigzag/pull/5) | Advertised input types without silent defaults | Integral numeric encodings and actual unsaved-file preservation covered; MSRV/Mac qualification remains. |
+| [#6](https://github.com/EffortlessSteven/zigzag/pull/6) | Expired queued-call admission and truthful started outcomes | Real HTTP queued and committed paths tested; client cancellation remains separate. |
+| [#7](https://github.com/EffortlessSteven/zigzag/pull/7) | Put hardware qualification next to its claim | Wording only; physical qualification remains unavailable. |
+| [#8](https://github.com/EffortlessSteven/zigzag/pull/8) | Declare geometry tests' existing JSON dependency | 72 selected vendored tests pass; root test selection is different. |
 
-`Document::save` already returns its filesystem error and commits path/name only
-after the write. `Studio::save` discards the result; `run_tool("save")` infers it
-from historical modified state. Preserve the result at the Studio boundary,
-retain UI status wording, and explicitly discard results at UI-only callers.
+These are open candidates, not accepted upstream contributions. Preserve useful
+work, address findings on its owning topic, and integrate through normal merges.
+Do not rewrite shared history. The combined review branch is `review/fork-candidate`.
 
-Files: `src/studio/{app,commands,tools,session}.rs`.
-Acceptance: successful modified save writes expected SVG and clears modified;
-failed saves return MCP errors for both modified and unmodified documents;
-failure preserves identity, stable document and flags; native failure reports
-`Couldn't save:`. Test failures use a regular file as destination parent.
+## Boundaries and proof
 
-Proof: `cargo test --locked --features gui --bin zigzag-studio save_`, then the
-studio tool tests. Inspect diff and whitespace. Repository-wide rustfmt currently
-reports extensive existing differences; do not reformat unrelated source.
+Use the smallest complete behavior correction. Preserve successful workflows,
+non-atomic partial progress, documented omission/reset/clamping, and truthful
+pre- versus post-commit outcomes. A prior clean review does not suppress a later
+finding. Source findings, reproduced defects, preservation tests and executed
+qualification have different meanings.
 
-Non-goals: atomic writes, export changes, protocol changes, and serialization.
-Rollback: revert slice 1. Remaining slices stay separate and preserve their
-dependency order. PR receipts should report actual commands and limitations.
+[Current qualification](fork-candidate-qualification.md) records candidate heads,
+commands, outcomes and gaps. [Review follow-ups](review-followups.md) records
+remaining work. Earlier plan revisions are in Git history, not current readiness
+claims. Keep these fork-only plans out of any eventual upstream topic package.
 
-## Slice 1 validation
+Remaining concrete investigations are [Windows test reliability #9](https://github.com/EffortlessSteven/zigzag/issues/9),
+[Studio protocol envelopes #10](https://github.com/EffortlessSteven/zigzag/issues/10), and
+[client cancellation/deadlines #11](https://github.com/EffortlessSteven/zigzag/issues/11).
 
-Base: `81825c4`. Windows, rustc 1.98.0. Locked dependencies.
-
-- PASS: focused save regression (1 test).
-- PASS: `cargo test --locked --features gui --bin zigzag-studio tools::tests:: -- --skip view_tools:: --skip path_tools::` (12 tests).
-- FAIL: broader `tools::tests` substring selection (29 pass, 1 fail):
-  `view_tools::tests::decorative_fills_and_satin_styles_from_the_panel`, line 882.
-  Same failure reproduced using unchanged base source, then restored this patch.
-- PASS: `git diff --check`.
-- FAIL: `cargo fmt --all -- --check`, extensive pre-existing formatting drift.
-- NOT RUN: full studio suite, Mac GUI, Rust 1.95, hardware qualification.
-
-Proof covers save result propagation and preserved save state. It does not prove
-atomic replacement or power-loss durability; slice 2 owns that contract.
-
-Red/green witness added after initial verification: test-only insertion of
-`unmodified_failed_save_as_is_an_mcp_error` into the original `81825c4` source
-(tools, app, commands and session) FAILS with `filesystem failure was reported
-as MCP success`. Patched save tests PASS (2). This directly discriminates the
-false-success defect. Independent review remains pending; do not treat an open
-fork PR as reviewed or ready for upstream submission.
-
-## Slice 2 verified plan
-
-Use `tempfile::NamedTempFile::persist` for same-directory, unique, atomic
-replacement of existing files on Windows and Unix. Flush and sync the file
-before commit; sync the parent on Unix where supported. This dependency is
-already in the lockfile transitively. Keep one library implementation, accessible
-to the separate studio binary through a hidden public module.
-
-Route Document saves, studio exports, and the existing small recovery wrapper
-through it. Private injectable replacement closures let document/export tests
-fail after partial temporary writes without process-global failure switches.
-Test successful overwrite, partial-write cleanup, replacement failure, identity
-preservation, and PES/HTML export preservation. Do not change format writers.
-Rollback is this slice alone, leaving slice 1's result contract intact.
-
-Slice 2 proof (Windows, rustc 1.98.0, locked): PASS document failure/identity
-test (1), shared replacement test (1), PES/HTML export test (1), recovery/session
-tests (9). `tempfile` 3.27.0 declares Rust 1.63 and MIT/Apache-2.0 licensing;
-promoting the locked transitive dependency adds no package versions. Added its MIT notice to
-`THIRD-PARTY-NOTICES.md`. Mac/Unix execution and power-loss tests
-are NOT RUN. Parent-directory sync errors after rename report a durability
-failure; they cannot roll back an already committed filesystem replacement.
-
-Review correction: a new regression reproduced in-memory normalization on a
-failed save in the first candidate. Save now serializes a cloned document and
-commits normalization/identity only after persistence succeeds. Windows focused
-document test and shared replacement tests PASS. An injected post-commit sync
-failure confirms new bytes remain visible and the error explicitly reports that
-commit. Basic permissions are copied; existing symlinks resolve to their target,
-and dangling links fail before writing. Unix mode/symlink test is NOT RUN here.
-ACLs, ownership, extended metadata, hard-link identity and unusual/network
-filesystem behavior remain qualification gaps; this is not universal durability.
-
-Notice qualification corrected: regenerated the complete configured Mac
-dependency notices (218 libraries) with isolated cargo-about 0.9.3 and the repo
-renderer, replacing the initial hand-added notice. Lock fingerprint matches.
-The installed 0.6.4 tool cannot accept `--offline` or the existing Ubuntu SPDX
-identifier; it was left untouched. No Mac application build is claimed.
-
-Additional metadata review preserves standard new-file Unix permissions
-(`0666 & umask`) instead of silently giving new documents tempfile's private
-mode. Existing destinations retain their basic permissions. A Unix comparison
-test against ordinary file creation was added but is NOT RUN on this Windows
-host. Windows replacement tests remain PASS (3).
-
-## Revised campaign contract
-
-The numbered rows are an investigation inventory, not eleven commitments.
-Every finding may be fixed, narrowed or ruled out. All work stays on this fork;
-upstream submission requires Steven's explicit word after review. Independent
-review is pending. Upstream packages should omit fork-only campaign machinery.
-Preserve useful authorized tracing/export workflows when designing embedded
-authority; nested dispatch must inherit grants. Client flags alone are not a
-server authorization boundary. Authentication and document targeting need
-explicit workflow decisions. Queued timeout/cancellation is a separate candidate.
-
-## Persistence review follow-up (fork only)
-
-Repair two distinct outcomes in the shared replacement seam. First reproduce a
-read-only destination replacement as an unprivileged Linux user; require the
-same effective write-access decision as an ordinary non-truncating write open.
-Do not infer access from mode bits (privileged users and ACLs differ).
-
-Represent a directory-sync failure after replacement as a typed committed
-outcome. Document normalization and Save As identity must then reflect the
-visible replacement, while Studio reports uncertainty, returns an error to MCP,
-and retains recovery until a successful retry. Pre-replacement errors preserve
-both disk bytes and live document state. Tests inject sync failure without
-claiming power-loss durability. No changes to serialization or format writers.
-
-Proof: native Linux replacement tests; Windows document, save, export and session
-regressions. macOS, unusual filesystems and physical crash testing remain outside
-this candidate's qualification. The write-access probe is not an authorization
-lease across concurrent filesystem changes.
-
-Persistence review results: the unprivileged Ubuntu/WSL regression failed before
-the write-access probe (ordinary write denied, replacement succeeded). With the
-probe, native Linux library tests PASS: 142 passed, 1 ignored, Rust 1.98.1.
-This executes Unix mode and symlink tests on native temporary files, not merely
-cross-compilation. Windows library tests PASS: 142 passed, 1 ignored, Rust 1.98.0.
-The committed-identity test also fails under a deliberate wrong implementation
-that discards prepared state on every error (`committed Save As identity lost`).
-The actual implementation restores the typed committed outcome; the Studio
-warning/recovery/retry test passes. No macOS or power-loss qualification is claimed.
-
-Windows focused Studio save tests PASS (3); PES/HTML export regression PASS (1).
-Session suite FAIL: 8 passed, 1 failed (`the_design_on_the_machine_comes_back`,
-restore_sent assertion). Exact isolated retry PASS. This repeats the unresolved
-session/simulator intermittency tracked in fork issue #9; do not classify the
-suite as green or claim a proven root cause. Raw current-run logs are retained
-under .git/qualification/persistence-*.log (local evidence, not upstream files).
-Save-result preservation review: the modified failure case now performs an
-actual unsaved object edit rather than assigning the flag. It checks serialized
-live artwork, Undo history and original disk bytes as well as stable identity
-and error status. Both focused save tests PASS on Windows with locked inputs.
-Normalization staging belongs to the separate persistence candidate; this test
-compares represented design, not raw pre-save XML or revision allocation.
+Embedded authority/authentication, document targeting, HTTP limits, CI, release
+inputs and protocol/SDK modernization remain separate design choices. Demonstrate
+the useful authorized design workflow and actual enforcement, including nested
+dispatch, before settling a capability model. Do not turn blanket tool removal,
+a configuration string, a release manifest or a simulator into a stronger claim
+than it establishes.
