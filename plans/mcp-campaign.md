@@ -98,6 +98,12 @@ and dangling links fail before writing. Unix mode/symlink test is NOT RUN here.
 ACLs, ownership, extended metadata, hard-link identity and unusual/network
 filesystem behavior remain qualification gaps; this is not universal durability.
 
+Notice qualification corrected: regenerated the complete configured Mac
+dependency notices (218 libraries) with isolated cargo-about 0.9.3 and the repo
+renderer, replacing the initial hand-added notice. Lock fingerprint matches.
+The installed 0.6.4 tool cannot accept `--offline` or the existing Ubuntu SPDX
+identifier; it was left untouched. No Mac application build is claimed.
+
 ## Revised campaign contract
 
 The numbered rows are an investigation inventory, not eleven commitments.
