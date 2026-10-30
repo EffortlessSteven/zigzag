@@ -1,0 +1,43 @@
+name: Fork native macOS persistence
+run-name: Native macOS persistence at ${{ github.sha }}
+
+on:
+  push:
+    branches: [qualification/macos-persistence]
+
+permissions:
+  contents: read
+
+jobs:
+  persistence:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install declared minimum Rust
+        run: rustup toolchain install 1.95.0 --profile minimal
+      - name: Test native library and filesystem behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qualification-results
+          {
+            sw_vers
+            uname -a
+            rustc +1.95.0 -Vv
+            git rev-parse HEAD
+            git rev-parse HEAD:src/file_replace.rs
+            shasum -a 256 Cargo.lock
+            df -h "${TMPDIR:-/tmp}"
+          } | tee qualification-results/environment.txt
+          cargo +1.95.0 test --locked --lib -- --nocapture 2>&1 | tee qualification-results/library.log
+      - name: Keep exact native qualification output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-macos-persistence
+          path: qualification-results/
+          if-no-files-found: error
+          retention-days: 7
