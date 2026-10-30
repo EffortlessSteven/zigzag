@@ -38,6 +38,7 @@ Commands:
 
 - Windows: `cargo +1.95.0 test --locked --features gui --lib --bins --target-dir target/msrv-1.95 -j 4`.
 - Linux: `cargo test --locked --features gui --lib --bins --target-dir /mnt/h/Code/Rust/zigzag/target/wsl-qualification -j 4`, executed natively in Ubuntu with the repository manifest selected explicitly.
+- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 143 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 20421e9, whose source matches the combined code head above.
 - Windows GUI/Bluetooth compilation: `cargo +1.95.0 check --locked --features gui,ble --bins --target-dir target/msrv-1.95 -j 4`: PASS.
 - Apple source compilation: the same check with `--target x86_64-apple-darwin`: PASS. This is not linking or execution on a Mac.
 - `git diff 81825c4812a6b9df45880da3a97fc7f63ad4e51b --check`: PASS. Whole-repository formatting drift was previously identified; no broad formatting rewrite is included.
@@ -49,8 +50,9 @@ stdin and streamed results. It does not establish installed-agent interoperabili
 
 Local raw logs and exact command/head receipts are
 `.git/qualification/final-windows.log`, `final-windows.json`,
-`final-linux.log`, `final-linux.json`, and the final GUI/Bluetooth check records. They are local working
-artifacts, not upstream-accessible evidence; the material results are above.
+`final-linux.log`, `final-linux.json`, `core-without-gui.log`,
+`core-without-gui.json`, and the final GUI/Bluetooth check records. These are local
+working artifacts, not upstream-accessible evidence; the material results are above.
 
 Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
 trace 222 passed and 2 ignored, selected through their own manifests. Those
@@ -101,6 +103,13 @@ topics and their threads have evidence-backed replies. CodeRabbit reviewed #13
 and its wiring feedback was repaired; no fresh independent approval of every
 latest topic is claimed. Keep candidates open for substantive review and Steven's
 selection. Green tests do not authorize upstream publication or release.
+
+The subsequent owner pass rechecked transaction capture/commit/restore, reference
+validation order, deadline admission, agent stdout/exit ordering, and simulator/
+writer completion. It found no additional blocker in those changed paths. Live
+review threads were all resolved at inspection. Issue #9 now names the current
+qualified source; #11 received newline-only cleanup. This is bounded owner review,
+not independent approval or qualification of the deferred protocol/authority work.
 
 NOT RUN: native Mac application/filesystem execution, physical Skitch upload or
 stitch-out, native OpenGL user sessions, power-loss tests, BLE transport runtime,

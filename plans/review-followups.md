@@ -6,10 +6,10 @@ records exact heads, commands, results and applicability.
 
 ## Completed qualification
 
-The current code passes Windows Rust 1.95 and native Linux selections: 143 library
-tests, 3 bridge tests and 184 Studio tests per platform. Existing benchmarks remain
-ignored (1 library, 3 Studio). Windows and Apple-target GUI/Bluetooth compilation
-passes. Earlier full-suite failures are retained in issue #9 and raw logs.
+Windows Rust 1.95 and native Linux GUI selections pass, as do Windows core
+without GUI and Windows/Apple-target GUI/Bluetooth compilation. Exact commands,
+counts, candidate identity and scope are recorded in the linked qualification
+record. Earlier failures remain in issue #9 and raw logs.
 
 PRs #12–#15 repair the test/completion problems behind that qualification work:
 worker completion versus frame count/render generations, agent exit versus stdout
@@ -19,9 +19,10 @@ repairs remain covered by the integrated run.
 
 ## Remaining work
 
-- Review the latest candidates substantively and select coherent contributions.
-  Addressed older threads and owner verification are not fresh independent
-  approval of every head. No fork-main merge is implied.
+- Independent review and Steven’s selection remain. The additional owner pass
+  found no new blocker in the changed paths, and live threads are resolved;
+  neither establishes independent approval of every head. No fork-main merge
+  is implied.
 - Native Mac runtime/filesystem, physical machine, native GL and crash durability
   checks remain unrun. Compilation and simulator tests are narrower evidence.
 - [#10](https://github.com/EffortlessSteven/zigzag/issues/10): running-Studio
