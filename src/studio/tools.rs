@@ -1904,6 +1904,58 @@ mod tests {
     use std::io::{Read, Write};
 
     #[test]
+    fn invalid_save_paths_preserve_disk_and_real_unsaved_edits() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "zigzag-invalid-save-{}-{stamp}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&dir)?;
+        let result = (|| -> anyhow::Result<()> {
+            let file = dir.join("design.svg");
+            std::fs::write(&file, BADGE)?;
+            let mut s = Studio::with_file(Some(file.clone()), None);
+            ensure!(
+                !s.run_tool("set_object", &json!({"object": 0, "angle": 33}))
+                    .is_error,
+                "fixture edit failed"
+            );
+            ensure!(s.modified, "fixture has no unsaved work");
+            let svg = s.doc.to_svg()?;
+            let stable = s.stable.to_svg()?;
+            let history = s.undo.len();
+            for path in [json!(123), Value::Null] {
+                let response = s.run_tool("save", &json!({"path": path}));
+                ensure!(
+                    response.is_error && text_of(&response).contains("path"),
+                    "invalid path reached save"
+                );
+                ensure!(
+                    std::fs::read(&file)? == BADGE.as_bytes(),
+                    "invalid Save As overwrote original"
+                );
+                ensure!(
+                    s.doc.path.as_ref() == Some(&file) && s.doc.name == "design",
+                    "invalid Save As changed identity"
+                );
+                ensure!(
+                    s.modified && s.doc.to_svg()? == svg && s.stable.to_svg()? == stable,
+                    "invalid path discarded unsaved work"
+                );
+                ensure!(s.undo.len() == history, "invalid path changed history");
+            }
+            Ok(())
+        })();
+        let cleanup = std::fs::remove_dir_all(&dir);
+        result?;
+        cleanup?;
+        Ok(())
+    }
+
+    #[test]
     fn input_validation_rejects_wrong_types_before_dispatch() -> anyhow::Result<()> {
         use anyhow::ensure;
         for (tool, args) in [

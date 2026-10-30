@@ -47,3 +47,9 @@ Whole decimal encodings now work; fractions, negative unsigned counts and
 out-of-range values are rejected instead of saturating or becoming omission.
 Numeric clamping remains in handlers. Index conversion is checked for platform
 width. This review is an implementation-owner pass, not independent approval.
+
+Additional preservation proof uses an opened file and an actual unsaved object
+edit. Numeric and explicit-null Save As paths return tool errors before saving;
+original disk bytes, live serialized work, identity, stable state and Undo length
+remain intact. This is the schema candidate's boundary, not a reason to widen
+the separate save-result PR. Focused Windows regression PASS.
