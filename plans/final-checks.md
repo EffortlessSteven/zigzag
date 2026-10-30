@@ -52,6 +52,9 @@ passed. Three targeted runs qualified the changing persistence candidates; no
 broad matrix or default-branch/upstream CI change was introduced. Reviewers made
 no branch switches, commits or public posts; the owner records their findings.
 
-Full native Mac Studio/GL interaction, BLE runtime, physical hardware,
-power-loss durability and unusual filesystems remain outside qualification.
-No release, upstream publication or fork-main merge was performed.
+Focused failure/state proof is sufficient for the current changed claims; see
+the qualification record's proof mapping. Full native Mac Studio/GL interaction,
+BLE radio/firmware behavior, physical stitch-out, power-cut survival and unusual
+filesystems remain unclaimed broader qualification, not acceptance blockers for
+these fixes. A read-only follow-up audit found no useful missing cheap persistence
+test. No release, upstream publication or fork-main merge was performed.

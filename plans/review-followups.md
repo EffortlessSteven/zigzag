@@ -23,8 +23,6 @@ repairs remain covered by the integrated run.
   #2 and the stacked #3/#5 source are complete; the one cleanup finding was
   reproduced, repaired and reviewed. No fork-main merge or upstream approval
   is implied.
-- Native Mac library/recovery checks now pass for #2. Full native Mac Studio,
-  physical machine, native GL and crash durability checks remain unrun.
 - [#10](https://github.com/EffortlessSteven/zigzag/issues/10): running-Studio
   envelope conformance, separate from bridge fallback serialization.
 - [#11](https://github.com/EffortlessSteven/zigzag/issues/11): explicit client
@@ -53,3 +51,13 @@ qualification and focused native Mac execution. Independent reviews are complete
 for #2 at 74b345a and the optional schema stack at 49fa259. CodeRabbit-specific
 requests were rate-limited, so its earlier 77d49f8 result is not represented as a
 review of the newer code. See final-checks.md for attribution and limits.
+
+## Qualification boundaries
+
+[Focused proof](fork-candidate-qualification.md#focused-proof-for-the-changed-behavior)
+covers the relevant controllable failure modes. Physical hardware, full native
+GL interaction, power-cut survival and exotic filesystems are unclaimed support
+areas, not a remaining checklist for these fixes. Add a targeted test when a
+specific changed contract has a gap; broader end-to-end checks belong to work
+that changes or advertises those capabilities. The current coverage assessment
+found no missing cheap persistence test.

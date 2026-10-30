@@ -136,6 +136,32 @@ including metadata warnings and equal metadata payloads. Negative controls
 caching uncertainty or returning early for inactive warnings both fail. The
 broader Windows/Linux selections and native Mac checks above include the repair.
 
+## Focused proof for the changed behavior
+
+Qualification follows the failure model at the changed boundary. Unavailable
+end-to-end environments are not blanket prerequisites for these contributions.
+Use direct observation where available and controlled faults/events where they
+make the relevant outcome deterministic. Existing raw runs above already include
+these tests; this assessment checked 16 source/receipt mappings and adds no
+product code or duplicate suite.
+
+| Changed seam | Relevant focused proof | What it establishes |
+| --- | --- | --- |
+| Whole-file persistence | Partial-write failure, Windows replacement failure, directory-sync error after commit, permissions/symlinks on real OS filesystems, Linux FIFO rejection | Old bytes survive preparation failure; commit outcomes and cleanup are truthful. Controller/cache behavior during physical power loss is a different claim. |
+| Document and recovery state | Staged identity/normalization; real temporary-file save/restart; active/inactive warnings, pre-commit failure, equal-metadata retry, Save cleanup and unknown-orphan preservation | Application state follows actual commit and recovery state. This does not depend on a Skitch or GPU. |
+| Atomic edits and UI planning | Distinct-tab rollback and one-step Undo; real headless frames; request generations versus accepted results; controlled worker completion | Correct edit/history/selection behavior and planning admission. Native graphics-driver behavior is unchanged. |
+| Preview arguments | Invalid-type rejection and actual PNG width after decimal-integer input; create/edit/preview/check workflow | The supplied value reaches the output rather than silently defaulting. No native GL context is needed for that contract. |
+| Simulator/test lifecycle | Real Session through Sim with controlled time; short/late replies and permanently short responses; thread-break/unpaired cases; headless whole-job sewing window | Timing, state progression and application workflow without physical machinery. The manual-clock change is covered by the integrated Windows/Linux run; these are not radio/firmware compatibility claims. |
+| Queued calls and agent output | Real HTTP admission/commit gates; explicit Exit/EOF ordering; portable executable fixture through the real send path | Expired queued work does not start, started timeouts remain uncertain, and late output survives. This is separate from full installed-client interoperability. |
+
+A read-only follow-up assessment found no additional cheap persistence test
+necessary for the stated contract. The focused fault/state tests already cover
+its pre/post-commit boundaries on the relevant platforms. No new physical device,
+BLE transport, GPU renderer or on-disk session schema is introduced by these fixes.
+Broader hardware/driver/release qualification becomes necessary when changing or
+claiming those behaviors; it is not outstanding acceptance work for unrelated
+save, parser, transaction or test-synchronization corrections.
+
 ## Review and remaining boundaries
 
 Owner review checked completion ordering, real send wiring, clock consistency,
@@ -153,10 +179,12 @@ review threads were all resolved at inspection. Issue #9 now names the current
 qualified source; #11 received newline-only cleanup. This is bounded owner review,
 not independent approval or qualification of the deferred protocol/authority work.
 
-NOT RUN: the full native Mac Studio suite, interactive Mac application sessions,
-physical Skitch upload or stitch-out, native OpenGL sessions, power-loss tests,
-BLE transport runtime, and unusual/network filesystems. The native Mac checks
-above establish the selected library/recovery paths only.
+Broader, unclaimed qualification: full native Mac Studio/GL interaction,
+physical Skitch upload/stitch-out, BLE radio/firmware behavior, real power-cut
+survival and unusual/network filesystems. These are not prerequisites for the
+bounded claims above. Native Mac execution establishes the selected real
+filesystem/library/recovery paths; fault injection establishes application
+handling of controlled failures.
 Basic file permissions and existing symlink behavior are covered; ownership,
 ACLs, hard-link identity and extended metadata are outside replacement guarantees.
 
