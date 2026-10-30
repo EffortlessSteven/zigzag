@@ -1452,7 +1452,8 @@ mod tests {
         let a = p[0].anchors[0].p;
         let from = screen(&h, a);
         h.state_mut().planner.slow = true;
-        let n = h.state().completed_plans;
+        let n = h.state().accepted_plans;
+        let generation = h.state().planner.generation();
         h.hover_at(from);
         h.run_steps(1);
         h.drag_at(from);
@@ -1461,8 +1462,12 @@ mod tests {
             h.hover_at(from + Vec2::new(4.0 * k as f32, 0.0));
             h.run_steps(1);
         }
+        anyhow::ensure!(
+            h.state().planner.generation() == generation,
+            "planning was admitted while dragging points"
+        );
         assert_eq!(
-            h.state().completed_plans,
+            h.state().accepted_plans,
             n,
             "nothing re-planned while dragging a point"
         );
@@ -1471,14 +1476,19 @@ mod tests {
         h.drop_at(from + Vec2::new(24.0, 0.0));
         h.run_steps(3);
         crate::test_support::finish_planning(&mut h)?;
-        assert_eq!(h.state().completed_plans, n + 1, "once on release");
+        anyhow::ensure!(
+            h.state().planner.generation() == generation + 1,
+            "point release did not admit exactly one plan"
+        );
+        assert_eq!(h.state().accepted_plans, n + 1, "once on release");
         // Moving the object with the Selection tool: the same.
         h.state_mut().set_tool(Tool::Select);
         h.run_steps(2);
         crate::test_support::finish_planning(&mut h)?;
         let c = screen(&h, shape_bounds(&h.state().doc.shapes[i]).center());
         h.state_mut().planner.slow = true;
-        let n = h.state().completed_plans;
+        let n = h.state().accepted_plans;
+        let generation = h.state().planner.generation();
         h.hover_at(c);
         h.run_steps(1);
         h.drag_at(c);
@@ -1487,11 +1497,23 @@ mod tests {
             h.hover_at(c + Vec2::new(0.0, 5.0 * k as f32));
             h.run_steps(1);
         }
-        assert_eq!(h.state().completed_plans, n, "nothing re-planned while moving");
+        anyhow::ensure!(
+            h.state().planner.generation() == generation,
+            "planning was admitted while moving the object"
+        );
+        assert_eq!(
+            h.state().accepted_plans,
+            n,
+            "nothing re-planned while moving"
+        );
         h.drop_at(c + Vec2::new(0.0, 30.0));
         h.run_steps(3);
         crate::test_support::finish_planning(&mut h)?;
-        assert_eq!(h.state().completed_plans, n + 1);
+        anyhow::ensure!(
+            h.state().planner.generation() == generation + 1,
+            "object release did not admit exactly one plan"
+        );
+        assert_eq!(h.state().accepted_plans, n + 1);
         Ok(())
     }
 
