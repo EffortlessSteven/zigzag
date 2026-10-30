@@ -35,7 +35,9 @@ repairs remain covered by the integrated run.
 Keep fork plans out of eventual upstream packages. The #3/#5 composition repair
 now lives in the topics, and direct topic merge 6b35cab passes all 27 MCP tool
 tests. #12 now observes admitted requests as well as accepted results. Both
-fresh findings have been repaired and their counterexamples tested. Refresh
+fresh findings have been repaired and their counterexamples tested. The later
+#2 FIFO replacement finding is also fixed in both working and clean topics, with
+a bounded Linux regression and renewed full qualification. Refresh
 proof for the actual extracted contribution before Steven authorizes submission.
 
 Clean branches and their proof are in [contribution preparation](upstream-preparation.md).

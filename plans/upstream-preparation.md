@@ -2,7 +2,7 @@
 
 Fork only. Nothing has been submitted upstream. Existing working topics and PRs
 retain their review history. Separate clean branches contain the contribution
-without fork plans or iterative history. The baseline is
+without fork plans or campaign history. The baseline is
 81825c4812a6b9df45880da3a97fc7f63ad4e51b.
 
 ## Prepared candidates
@@ -10,13 +10,14 @@ without fork plans or iterative history. The baseline is
 Read-only upstream check confirmed main still at the baseline above. Every row
 has an identical complete tree outside plans/ to its source topic. No code,
 tests, notices, lockfiles or fixtures were removed. Each prepare/ branch has one
-contribution commit; #2 has the necessary clean #1 commit beneath it. The working
-topics and fork PRs are preserved. All branches below are pushed only to the fork.
+contribution commit except #2, which has the necessary clean #1 base and a
+follow-up commit repairing the fresh special-file finding. Shared history was
+not rewritten. The working topics and fork PRs are preserved. All branches below are pushed only to the fork.
 
 | Fork PR | Clean branch | Exact candidate head |
 | --- | --- | --- |
 | #1 | [prepare/mcp-save-result](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-save-result) | `d0654f6c400cf66a18ecd41a98dd28a2cf4407fe` |
-| #2 | [prepare/atomic-file-replacement](https://github.com/EffortlessSteven/zigzag/tree/prepare/atomic-file-replacement) | `ae862a289d86366460e7c740daaf23d5b0a3106c` |
+| #2 | [prepare/atomic-file-replacement](https://github.com/EffortlessSteven/zigzag/tree/prepare/atomic-file-replacement) | `3eaf359f8bbc08bf753f6233b3f5cbaec98b1d04` |
 | #3 | [prepare/current-document-batches](https://github.com/EffortlessSteven/zigzag/tree/prepare/current-document-batches) | `a17d2e3851117b3e40dd72757faca4a04faba42f` |
 | #4 | [prepare/bridge-json-rpc](https://github.com/EffortlessSteven/zigzag/tree/prepare/bridge-json-rpc) | `c9f67b581855b0a222a53085c7451a768c557fa9` |
 | #5 | [prepare/mcp-schema-validation](https://github.com/EffortlessSteven/zigzag/tree/prepare/mcp-schema-validation) | `4d3b01f4bdd43c8212b1f41cfbc653f854733775` |
@@ -39,6 +40,7 @@ already contain one focused commit and no internal plans.
 - Clean #4: Rust 1.95 `cargo test --locked --bin zigzag-mcp --target-dir target/msrv-1.95 -j 4`: PASS, three tests.
 - Every extracted diff passes `git diff --check` and contains no plans/ files. Production code/tests have no dependency on plans/. Complete product-tree equality was rechecked before pushing.
 - Other isolated-topic results retain their existing scope because extraction changed only history and omitted internal plans. No new full standalone pass for every topic is claimed. In particular, combined-fork GUI results are not a claim that an isolated topic fixes all baseline UI failures.
+- Clean #2 now includes the non-regular-target guard. Its product tree matches the revised working topic 77d49f849e665da1011279ac0c9e27a8f7820169. Standalone library proof and fresh integrated qualification are recorded in the linked qualification record.
 - Earlier #3/#5 direct composition proof still applies to the identical product trees; their static names/value boundary was preserved in both clean topics.
 
 The local exact-head execution records are `clean-topic-tests.json`,

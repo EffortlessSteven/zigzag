@@ -1,7 +1,7 @@
 # Fork candidate qualification
 
 Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
-Tested combined code/fixture head: `c1452e428f492858ed6f652a3d5b6435f9bf0c1e`. Later changes are documentation
+Tested combined code/fixture head: `1bbdb3c8de0577adf7822305144b5ccb4395fea3`. Later changes are documentation
 only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
 No upstream submission, fork-main merge, release or hardware qualification is
 claimed. These are open candidates, not a required count of contributions.
@@ -9,7 +9,7 @@ claimed. These are open candidates, not a required count of contributions.
 | Fork PR | Branch | Head |
 | --- | --- | --- |
 | #1 | `fix/mcp-save-result` | `4dd38e2c79cbc40ce699db34265b3617449e1e14` |
-| #2 | `fix/atomic-file-replacement` | `bbaf8458408e215d72af5ddda40e51c2d175ad52` |
+| #2 | `fix/atomic-file-replacement` | `77d49f849e665da1011279ac0c9e27a8f7820169` |
 | #3 | `fix/current-document-batches` | `69570f64d1a402503a9de6f0ea96b53498fdf318` |
 | #4 | `fix/bridge-json-rpc` | `d9db78c1d28ddcc38144a72de70e0674879322f6` |
 | #5 | `fix/mcp-schema-validation` | `30f6fd28498d1e691669554d6e5f921eed5688fa` |
@@ -29,7 +29,7 @@ Separate target directories avoid sharing Windows/Linux/compiler artifacts.
 
 | Selection | Windows Rust 1.95 | Native Linux Rust 1.98.1 |
 | --- | --- | --- |
-| Library, GUI feature enabled | PASS: 143, 1 ignored | PASS: 143, 1 ignored |
+| Library, GUI feature enabled | PASS: 144, 1 ignored | PASS: 145, 1 ignored |
 | `zigzag-mcp` | PASS: 3 | PASS: 3 |
 | `zigzag-studio` | PASS: 184, 3 ignored | PASS: 184, 3 ignored |
 | `zigzag` CLI | 0 selected, no added coverage | 0 selected, no added coverage |
@@ -38,7 +38,7 @@ Commands:
 
 - Windows: `cargo +1.95.0 test --locked --features gui --lib --bins --target-dir target/msrv-1.95 -j 4`.
 - Linux: `cargo test --locked --features gui --lib --bins --target-dir /mnt/h/Code/Rust/zigzag/target/wsl-qualification -j 4`, executed natively in Ubuntu with the repository manifest selected explicitly.
-- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 143 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at 20421e9, whose source matches the combined code head above.
+- Windows core without GUI: `cargo +1.95.0 test --locked --lib --bins --target-dir target/msrv-1.95 -j 4`: PASS, 144 library tests (one benchmark ignored), three bridge tests; CLI selects zero. Run at the combined code head above.
 - Windows GUI/Bluetooth compilation: `cargo +1.95.0 check --locked --features gui,ble --bins --target-dir target/msrv-1.95 -j 4`: PASS.
 - Apple source compilation: the same check with `--target x86_64-apple-darwin`: PASS. This is not linking or execution on a Mac.
 - `git diff 81825c4812a6b9df45880da3a97fc7f63ad4e51b --check`: PASS. Whole-repository formatting drift was previously identified; no broad formatting rewrite is included.
@@ -49,9 +49,9 @@ std-only Rust helper during execution and checks real executable identity, flags
 stdin and streamed results. It does not establish installed-agent interoperability.
 
 Local raw logs and exact command/head receipts are
-`.git/qualification/final-windows.log`, `final-windows.json`,
-`final-linux.log`, `final-linux.json`, `core-without-gui.log`,
-`core-without-gui.json`, and the final GUI/Bluetooth check records. These are local
+`.git/qualification/fifo-integrated-windows.log`, `fifo-integrated-windows.json`,
+`fifo-integrated-linux.log`, `fifo-integrated-linux.json`, `fifo-core.log`,
+`fifo-core.json`, `fifo-gui-ble.*` and `fifo-apple.*`. These are local
 working artifacts, not upstream-accessible evidence; the material results are above.
 
 Earlier unchanged vendored evidence remains applicable: geometry 72 passed;
@@ -93,6 +93,17 @@ metadata does not select them as workspace packages.
 The older 176/4 and 182/1 Studio results remain in raw logs and issue #9; they
 are not concealed or treated as current failures. The full selections above
 exercise the combined repairs, including the originally failing cases.
+
+The fresh #2 special-file review reproduced replacement of a FIFO by a regular
+file. The original helper fails the bounded Linux regression with `FIFO accepted`.
+The repair rejects non-regular metadata before the write-access open, including
+resolved symlink targets. The test checks unchanged FIFO/link kind, no writer
+callback and no leaked temporary. Linux keeps the pipe open read/write to prevent
+the old probe from blocking; that fixture is intentionally Linux-only. A common
+directory test checks InvalidInput and preservation on Windows too. Standalone
+#2 library suites pass 143 on Windows and 144 on Linux (one benchmark ignored
+each). The integrated counts above also include the separate simulator repair.
+No new dependency, streaming export or concurrent-path lease is introduced.
 
 ## Review and remaining boundaries
 
