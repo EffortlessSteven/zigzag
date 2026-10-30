@@ -39,3 +39,8 @@ After correction, the loaded integrated Studio run has 180 passed, 1 failed,
 3 ignored; only the separate non-portable agent fixture fails. The restored
 real drag test passes after a negative control removing point-drag commit failed
 its exactly-one-completed-plan assertion. No timeout was treated as a pass.
+
+Extracted as a clean topic on baseline 81825c4 (`b2e538b`), without other campaign
+code. Its standalone Studio run has 155 passed, 1 failed, 3 ignored; again only
+the separate agent executable fixture fails. All four repaired UI tests pass.
+This fork-only plan is excluded from any eventual upstream package.
