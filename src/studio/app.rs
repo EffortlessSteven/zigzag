@@ -660,7 +660,7 @@ impl Studio {
             .any(|i| i.shape.is_none() && i.level == Level::Error)
     }
 
-    pub fn save(&mut self, path: Option<&Path>) {
+    pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<PathBuf> {
         match self.doc.save(path) {
             Ok(p) => {
                 self.stable = self.doc.clone();
@@ -670,8 +670,12 @@ impl Studio {
                     p.display()
                 );
                 self.dirty = true;
+                Ok(p)
             }
-            Err(e) => self.status = format!("Couldn't save: {e:#}"),
+            Err(e) => {
+                self.status = format!("Couldn't save: {e:#}");
+                Err(e)
+            }
         }
     }
 
@@ -691,17 +695,29 @@ impl Studio {
             dialog = dialog.set_directory(dir);
         }
         if let Some(p) = dialog.save_file() {
-            self.save(Some(&p));
+            let _ = self.save(Some(&p));
         }
     }
 
     pub fn export_to(&mut self, ext: &str, path: &Path) -> anyhow::Result<()> {
+        self.export_to_with(ext, path, |path, bytes| {
+            use std::io::Write;
+            zigzag::file_replace::replace_file_atomic(path, |file| file.write_all(bytes))
+        })
+    }
+
+    fn export_to_with(
+        &mut self,
+        ext: &str,
+        path: &Path,
+        replace: impl FnOnce(&Path, &[u8]) -> std::io::Result<()>,
+    ) -> anyhow::Result<()> {
         let bytes = if ext == "html" {
             self.worksheet_html()?.into_bytes()
         } else {
             zigzag::formats::write_format(&self.design, ext)?
         };
-        std::fs::write(path, bytes)?;
+        replace(path, &bytes)?;
         Ok(())
     }
 
@@ -1908,6 +1924,36 @@ pub fn mean_satin_width(s: &Shape) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn atomic_exports_preserve_old_bytes_on_failure() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        use std::io::{self, Write};
+        let dir = tempfile::tempdir()?;
+        let source = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/examples/badge.svg"));
+        let mut studio = Studio::with_file(Some(source), None);
+        for format in ["pes", "html"] {
+            let path = dir.path().join(format!("export.{format}"));
+            std::fs::write(&path, b"original")?;
+            let failed = studio.export_to_with(format, &path, |path, _| {
+                zigzag::file_replace::replace_file_atomic(path, |file| {
+                    file.write_all(b"partial")?;
+                    Err(io::Error::other("injected partial export"))
+                })
+            });
+            ensure!(failed.is_err(), "partial export succeeded");
+            ensure!(std::fs::read(&path)? == b"original", "{format} truncated original");
+            studio.export_to(format, &path)?;
+            let bytes = std::fs::read(&path)?;
+            if format == "pes" {
+                ensure!(bytes.starts_with(b"#PES0001"), "invalid PES");
+            } else {
+                ensure!(String::from_utf8(bytes)?.contains("<html"), "invalid HTML");
+            }
+        }
+        ensure!(std::fs::read_dir(dir.path())?.count() == 2, "temporary leaked");
+        Ok(())
+    }
+
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
 

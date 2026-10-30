@@ -128,15 +128,7 @@ fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = path.with_extension("tmp");
-    {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        // On disk before it takes the old file's place: a power cut or a
-        // kernel panic right after the rename can't leave an empty file.
-        f.sync_all()?;
-    }
-    std::fs::rename(&tmp, path)
+    zigzag::file_replace::replace_file_atomic(path, |file| file.write_all(text.as_bytes()))
 }
 
 /// What `session.json` says about one tab.
@@ -820,7 +812,7 @@ mod tests {
         a.structural(|d| d.delete(1)).unwrap();
         a.write_session();
         assert!(dir.join("recovery.svg").exists());
-        a.save(None);
+        let _ = a.save(None);
         a.write_session();
         assert!(
             !dir.join("recovery.svg").exists(),
