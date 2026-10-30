@@ -44,3 +44,15 @@ and `native-macos-recovery/`; local full-suite records are `recovery-integrated-
 Earlier failures and negative controls are retained; they are not qualification
 passes. Mac GUI interaction/full Studio suite, BLE runtime, hardware stitch-out,
 crash/power-loss durability and unusual filesystems remain outside these checks.
+
+## Additional independent agent review
+
+Steven authorized agents after the CodeRabbit quota block. The schema reviewer
+found no actionable issue at 49fa259 and inspected the applicable raw proof.
+The persistence reviewer found a source-derived P3: committed-but-uncertain
+recovery deliberately clears durable caches, so normal Save before a retry can
+leave its sidecar orphaned. Reproduce active/inactive Save, then clean application-
+owned recovery files when a document is clean regardless of cache presence.
+Keep IO at session-write time, not every frame; preserve uncertain-file retry
+semantics while modified. Requalify the caller and request the same reviewer’s
+focused review of the repair. No unrelated policy or dependency change.
