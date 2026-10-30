@@ -44,3 +44,21 @@ completion waits for both. The test also covers EOF-before-exit, late session,
 assistant output, and the actual streamed completion rather than generic Done.
 All 15 standalone Windows agent tests pass. Earlier native Linux tests passed
 before the EOF correction; final integrated cross-platform qualification follows.
+
+Review identified that direct start_command coverage bypassed send's executable
+lookup/handoff. Restore the real send path with a small std-only Rust fixture
+compiled during the test. Run the send test in a child test process with scoped
+ZIGZAG_CLAUDE/PATH settings, including a safe decoy executable so wrong lookup is
+observable without invoking an installed agent. Verify actual executable identity,
+stdin bytes, session and completion. No global environment mutation or production
+launcher injection is needed; remove the now-unnecessary private extraction.
+The fixture requires rustc, as the project's Cargo build already does. Keep the
+event-order regression and final source qualification on each supported runner.
+
+The real-send fixture rejects two negative controls: ignoring the configured
+executable selects the safe decoy and fails identity comparison; replacing send's
+prompt fails the recorded stdin comparison. The selected executable also checks
+the actual strict-MCP and disabled-built-in flags. The private launch extraction
+is removed; production send uses its original inline flow plus EOF tracking.
+
+All 15 standalone Windows agent tests pass with real send coverage restored.

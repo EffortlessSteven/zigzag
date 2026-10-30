@@ -414,11 +414,7 @@ impl AgentState {
             .and_then(|e| e.parent().map(|d| d.join("zigzag-mcp")))
             .filter(|p| p.is_file());
         let url = format!("http://{addr}/mcp");
-        let cmd = self.command(program, &url, bridge, addr.port());
-        self.start_command(cmd, text, ctx);
-    }
-
-    fn start_command(&mut self, mut cmd: Command, text: String, ctx: &egui::Context) {
+        let mut cmd = self.command(program, &url, bridge, addr.port());
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1689,8 +1685,8 @@ mod tests {
         use anyhow::ensure;
         let child = Arc::new(Mutex::new(
             Command::new(std::env::current_exe()?)
-                .args(["--exact", "agent::tests::agent_process_fixture"])
-                .env_remove("ZIGZAG_TEST_AGENT_FIXTURE")
+                .args(["--exact", "agent::tests::send_process_fixture"])
+                .env_remove("ZIGZAG_SEND_FIXTURE")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -1755,90 +1751,120 @@ mod tests {
     }
 
     #[test]
-    fn agent_process_fixture() -> anyhow::Result<()> {
-        use std::io::Read;
-        if std::env::var_os("ZIGZAG_TEST_AGENT_FIXTURE").as_deref()
-            != Some(std::ffi::OsStr::new("1"))
-        {
+    fn send_process_fixture() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        if std::env::var_os("ZIGZAG_SEND_FIXTURE").as_deref() != Some(std::ffi::OsStr::new("1")) {
             return Ok(());
         }
-        let mut prompt = String::new();
-        std::io::stdin().read_to_string(&mut prompt)?;
-        let mut out = std::io::stdout().lock();
-        // Separate JSON from the test harness's own progress output.
-        writeln!(out)?;
-        for event in [
-            serde_json::json!({"type":"system", "subtype":"init", "session_id":"s1"}),
-            serde_json::json!({"type":"assistant", "message":{"content":[{"type":"text", "text":format!("you said {prompt}")} ]}}),
-            serde_json::json!({"type":"result", "subtype":"success", "is_error":false, "num_turns":1, "duration_ms":10}),
-        ] {
-            writeln!(out, "{event}")?;
-            out.flush()?;
+        let expected =
+            PathBuf::from(std::env::var_os("ZIGZAG_CLAUDE").context("fixture executable")?);
+        let input =
+            PathBuf::from(std::env::var_os("ZIGZAG_AGENT_STDIN").context("fixture stdin record")?);
+        let mut agent = AgentState {
+            kind: AgentKind::Claude,
+            path: Some(None),
+            ..Default::default()
+        };
+        let prompt = "hello\n\"quoted\" \\ path";
+        agent.prompt = prompt.into();
+        agent.send(Some("127.0.0.1:1".parse()?), &egui::Context::default());
+        let started = Instant::now();
+        while agent.running() {
+            agent.poll();
+            if started.elapsed() >= Duration::from_secs(10) {
+                agent.stop();
+                anyhow::bail!("agent fixture did not finish: {:?}", agent.log);
+            }
+            std::thread::sleep(Duration::from_millis(1));
         }
+        ensure!(
+            agent.session.as_deref() == Some("s1"),
+            "missing streamed session: {:?}",
+            agent.log
+        );
+        ensure!(
+            agent
+                .log
+                .contains(&Entry::Said("fixture received stdin".into())),
+            "missing output: {:?}",
+            agent.log
+        );
+        ensure!(
+            matches!(agent.log.last(), Some(Entry::Done(_))),
+            "missing completion: {:?}",
+            agent.log
+        );
+        ensure!(agent.prompt.is_empty(), "submitted prompt was not cleared");
+        ensure!(
+            std::fs::read(&input)? == prompt.as_bytes(),
+            "send changed stdin"
+        );
+        let actual = std::fs::read_to_string(input.with_extension("program"))?;
+        ensure!(
+            std::fs::canonicalize(actual)? == std::fs::canonicalize(expected)?,
+            "send launched a different executable"
+        );
         Ok(())
     }
 
     #[test]
     fn runs_an_agent_program_and_streams_its_output() -> anyhow::Result<()> {
-        use anyhow::ensure;
-        let mut a = AgentState {
-            kind: AgentKind::Claude,
-            path: Some(None),
-            ..Default::default()
-        };
-        let program = std::env::current_exe()?;
-        let generated = a.command(program.clone(), "http://127.0.0.1:1/mcp", None, 1);
-        let args: Vec<String> = generated
-            .get_args()
-            .map(|s| s.to_string_lossy().into())
-            .collect();
-        ensure!(
-            args.iter().any(|s| s == "--strict-mcp-config"),
-            "missing strict MCP config"
-        );
-        ensure!(
-            args.windows(2)
-                .any(|w| w.first().is_some_and(|s| s == "--tools")
-                    && w.get(1).is_some_and(String::is_empty)),
-            "built-in tool configuration changed"
-        );
-
-        let mut cmd = Command::new(program);
-        cmd.args([
-            "--exact",
-            "agent::tests::agent_process_fixture",
-            "--nocapture",
-        ])
-        .env("ZIGZAG_TEST_AGENT_FIXTURE", "1");
-        let ctx = egui::Context::default();
-        let prompt = "hello\n\"quoted\" \\ path";
-        a.prompt = prompt.into();
-        a.start_command(cmd, prompt.into(), &ctx);
-        let started = Instant::now();
-        while a.running() {
-            a.poll();
-            if started.elapsed() >= Duration::from_secs(10) {
-                a.stop();
-                anyhow::bail!("agent fixture did not finish: {:?}", a.log);
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        ensure!(
-            a.session.as_deref() == Some("s1"),
-            "missing streamed session: {:?}",
-            a.log
-        );
-        ensure!(
-            a.log.contains(&Entry::Said(format!("you said {prompt}"))),
-            "stdin/stream roundtrip failed: {:?}",
-            a.log
-        );
-        ensure!(
-            matches!(a.log.last(), Some(Entry::Done(_))),
-            "missing completion: {:?}",
-            a.log
-        );
-        ensure!(a.prompt.is_empty(), "submitted prompt was not cleared");
+        use anyhow::{Context, ensure};
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("zigzag-agent-{}-{stamp}", std::process::id()));
+        std::fs::create_dir(&dir)?;
+        let result = (|| -> anyhow::Result<()> {
+            let source = dir.join("fixture.rs");
+            std::fs::write(
+                &source,
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/agent_process.rs"
+                )),
+            )?;
+            let program = dir.join(format!("selected-agent{}", std::env::consts::EXE_SUFFIX));
+            let compiler = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+            let built = Command::new(compiler)
+                .args(["--edition=2024", "--crate-name", "agent_fixture"])
+                .arg(&source)
+                .arg("-o")
+                .arg(&program)
+                .output().context("compiling std-only agent fixture")?;
+            ensure!(
+                built.status.success(),
+                "fixture compile failed: {}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            // Safe lookup fallback: a wrong lookup invokes a decoy, never an installed agent.
+            let decoy = dir.join("decoy");
+            std::fs::create_dir(&decoy)?;
+            std::fs::copy(&program, decoy.join("claude"))?;
+            #[cfg(windows)]
+            std::fs::copy(&program, decoy.join("claude.exe"))?;
+            let output = Command::new(std::env::current_exe()?)
+                .args([
+                    "--exact",
+                    "agent::tests::send_process_fixture",
+                    "--nocapture",
+                ])
+                .env("ZIGZAG_SEND_FIXTURE", "1")
+                .env("ZIGZAG_CLAUDE", &program)
+                .env("ZIGZAG_AGENT_STDIN", dir.join("stdin"))
+                .env("PATH", &decoy)
+                .output().context("running isolated send fixture")?;
+            ensure!(
+                output.status.success(),
+                "send process fixture failed: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok(())
+        })();
+        let cleanup = std::fs::remove_dir_all(&dir);
+        result?;
+        cleanup?;
         Ok(())
     }
 
