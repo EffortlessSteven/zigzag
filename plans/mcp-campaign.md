@@ -7,7 +7,7 @@ or hardware qualification is authorized by this plan.
 | Slice | Seam | Dependencies | State |
 | --- | --- | --- | --- |
 | 1 | Propagate save failures through MCP | none | verified; fork PR pending |
-| 2 | Atomic document and export replacement | 1 | pending |
+| 2 | Atomic document and export replacement | 1 | verified; stacked fork PR |
 | 3 | Current-document atomic batches and shared tool policy | none | pending |
 | 4 | Design-only embedded agent capabilities | 3 | pending |
 | 5 | JSON-RPC bridge error serialization | none | pending |
@@ -54,3 +54,26 @@ Base: `81825c4`. Windows, rustc 1.98.0. Locked dependencies.
 
 Proof covers save result propagation and preserved save state. It does not prove
 atomic replacement or power-loss durability; slice 2 owns that contract.
+
+## Slice 2 verified plan
+
+Use `tempfile::NamedTempFile::persist` for same-directory, unique, atomic
+replacement of existing files on Windows and Unix. Flush and sync the file
+before commit; sync the parent on Unix where supported. This dependency is
+already in the lockfile transitively. Keep one library implementation, accessible
+to the separate studio binary through a hidden public module.
+
+Route Document saves, studio exports, and the existing small recovery wrapper
+through it. Private injectable replacement closures let document/export tests
+fail after partial temporary writes without process-global failure switches.
+Test successful overwrite, partial-write cleanup, replacement failure, identity
+preservation, and PES/HTML export preservation. Do not change format writers.
+Rollback is this slice alone, leaving slice 1's result contract intact.
+
+Slice 2 proof (Windows, rustc 1.98.0, locked): PASS document failure/identity
+test (1), shared replacement test (1), PES/HTML export test (1), recovery/session
+tests (9). `tempfile` 3.27.0 declares Rust 1.63 and MIT/Apache-2.0 licensing;
+promoting the locked transitive dependency adds no package versions. Added its MIT notice to
+`THIRD-PARTY-NOTICES.md`. Mac/Unix execution and power-loss tests
+are NOT RUN. Parent-directory sync errors after rename report a durability
+failure; they cannot roll back an already committed filesystem replacement.
