@@ -10,9 +10,10 @@ without fork plans or campaign history. The baseline is
 Read-only upstream check confirmed main still at the baseline above. Every row
 has an identical complete tree outside plans/ to its source topic. No code,
 tests, notices, lockfiles or fixtures were removed. Each prepare/ branch has one
-contribution commit except #2, which has the necessary clean #1 base and a
-follow-up commits repairing special-file rejection and recovery metadata outcomes. Shared history was
-not rewritten. The working topics and fork PRs are preserved. All branches below are pushed only to the fork.
+contribution commit except #2, which has the necessary clean #1 base and
+follow-up commits repairing special-file rejection and recovery metadata outcomes.
+Shared history was not rewritten. The working topics and fork PRs are preserved.
+All branches below are pushed only to the fork.
 
 | Fork PR | Clean branch | Exact candidate head |
 | --- | --- | --- |
