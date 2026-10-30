@@ -37,3 +37,7 @@ now lives in the topics, and direct topic merge 6b35cab passes all 27 MCP tool
 tests. #12 now observes admitted requests as well as accepted results. Both
 fresh findings have been repaired and their counterexamples tested. Refresh
 proof for the actual extracted contribution before Steven authorizes submission.
+
+Clean branches and their proof are in [contribution preparation](upstream-preparation.md).
+Their product trees match the reviewed topics; extraction is not independent
+approval or authorization to submit.
