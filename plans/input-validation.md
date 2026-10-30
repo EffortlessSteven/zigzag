@@ -38,3 +38,12 @@ licenses. Used the existing renderer, normalized Windows output line endings,
 and appended the actual lockfile digest. This qualifies notice generation, not
 a Mac build. Independent review, Rust 1.95 execution, Mac and hardware tests
 remain pending/not run.
+
+Adversarial review correction: schema-valid `width_px: 333.0` initially passed
+validation but the handler silently rendered its 900-pixel default. The new
+PNG-header regression FAILS that candidate and passes after sharing unsigned
+integer parsing across indices, preview widths, trace colors and kerning.
+Whole decimal encodings now work; fractions, negative unsigned counts and
+out-of-range values are rejected instead of saturating or becoming omission.
+Numeric clamping remains in handlers. Index conversion is checked for platform
+width. This review is an implementation-owner pass, not independent approval.
