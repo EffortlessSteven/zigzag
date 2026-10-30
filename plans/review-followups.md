@@ -19,6 +19,10 @@ repairs remain covered by the integrated run.
 
 ## Remaining work
 
+Two fresh P3 findings in #3 and #13 remain OPEN. Their counterexamples, ownership
+and delivery proof are in [final corrections](final-corrections.md). Earlier
+clean reviews and passing selections do not close them.
+
 - Steven’s contribution selection remains. Separate agent reviews of current
   #2 and the stacked #3/#5 source are complete; the one cleanup finding was
   reproduced, repaired and reviewed. No fork-main merge or upstream approval
