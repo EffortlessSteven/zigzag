@@ -94,3 +94,22 @@ and native Mac Save-after-warning cleanup. CodeRabbit-specific requests remain
 rate-limited; that is separate from the completed independent agent reviews.
 Steven accepted the jsonschema choice; no bespoke validator rewrite or unmeasured
 dependency-cost claim is implied.
+
+## Persistence cost and simplicity review
+
+A focused independent static assessment of #2 at 74b345a found no concrete
+avoidable cost or unnecessary abstraction. Save adds one staged Document clone
+per attempt with a destination; this preserves live normalization/identity on
+failure. The existing Studio stable copy remains. Save renders/syncs once;
+exports already built complete bytes, and recovery adds no full-document copy.
+
+Replacement intentionally pays for a unique sibling, file sync, replacement,
+Unix parent sync and existing-target write/permission checks. Current recovery
+snapshots skip SVG rewrites; metadata-only warnings keep that cache, and a
+successful retry settles. The frame path adds no filesystem probe, document copy
+or serialization. Tab switching moves Current/Retry state.
+
+The extra save copy can raise peak memory for large designs. No wall-time,
+allocation or large-document benchmark was performed, so no quantified speed
+claim is made. The existing local/native execution and targeted state/failure
+proof remain applicable; no runtime code or redundant suite changed in this pass.

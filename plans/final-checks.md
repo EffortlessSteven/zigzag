@@ -58,3 +58,9 @@ BLE radio/firmware behavior, physical stitch-out, power-cut survival and unusual
 filesystems remain unclaimed broader qualification, not acceptance blockers for
 these fixes. A read-only follow-up audit found no useful missing cheap persistence
 test. No release, upstream publication or fork-main merge was performed.
+
+A later focused independent cost/simplicity assessment of #2 at 74b345a found no
+avoidable work. Its deliberate costs are the staged save copy and replacement
+checks/syncs; recovery caching and settling remain effective, with no new
+per-frame IO or document copy. This was static review, not a latency/allocation
+benchmark. Source and applicable qualification are unchanged.
