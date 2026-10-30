@@ -28,14 +28,34 @@ use zigzag::geom::P;
 /// How long edits wait before they're written (a burst of them, one write).
 const SETTLE_S: f64 = 1.5;
 
+/// A sidecar known to this session. An uncertain committed write still
+/// exists: retain that knowledge for cleanup while keeping it retryable.
+pub(crate) enum RecoveryState {
+    Current(u64, Snap),
+    Retry,
+}
+
+impl RecoveryState {
+    fn current(doc: &Document) -> Self {
+        Self::Current(doc.rev(), snapshot_of(doc))
+    }
+
+    fn needs_write(&self, doc: &Document) -> bool {
+        match self {
+            Self::Current(rev, snap) => *rev != doc.rev() || *snap != snapshot_of(doc),
+            Self::Retry => true,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct SessionState {
     /// Where the session is kept (None: not kept, as in tests).
     dir: Option<PathBuf>,
     /// When the next write is due (egui time), if something changed.
     due: Option<f64>,
-    /// The document in front as last written to its recovery file.
-    saved_doc: Option<(u64, Snap)>,
+    /// A known recovery file and whether it needs another write.
+    saved_doc: Option<RecoveryState>,
     /// The recovery file of the document in front (see [`recovery_file`]);
     /// each tab has its own.
     pub(crate) rec: u32,
@@ -105,7 +125,7 @@ impl SessionState {
 
     /// Swap what's kept about the document in front with a tab's (see
     /// `tabs.rs`).
-    pub(crate) fn swap_doc(&mut self, saved: &mut Option<(u64, Snap)>, rec: &mut u32) {
+    pub(crate) fn swap_doc(&mut self, saved: &mut Option<RecoveryState>, rec: &mut u32) {
         std::mem::swap(&mut self.saved_doc, saved);
         std::mem::swap(&mut self.rec, rec);
     }
@@ -216,13 +236,13 @@ impl Studio {
         }
     }
 
-    /// Unsaved changes that the recovery file doesn't have yet.
+    /// Whether recovery needs updating or removal after a normal Save.
     fn doc_unsaved_changed(&self) -> bool {
         if !self.modified {
             return self.session.saved_doc.is_some();
         }
         match &self.session.saved_doc {
-            Some((rev, snap)) => *rev != self.doc.rev() || *snap != snapshot_of(&self.doc),
+            Some(saved) => saved.needs_write(&self.doc),
             None => true,
         }
     }
@@ -250,10 +270,10 @@ impl Studio {
                 let Ok(text) = self.doc.to_svg() else { return };
                 match write(&svg, &text) {
                     Ok(()) => {
-                        self.session.saved_doc = Some((self.doc.rev(), snapshot_of(&self.doc)));
+                        self.session.saved_doc = Some(RecoveryState::current(&self.doc));
                     }
                     Err(error) if zigzag::file_replace::replacement_committed(&error) => {
-                        self.session.saved_doc = None;
+                        self.session.saved_doc = Some(RecoveryState::Retry);
                         durable = false;
                     }
                     // Pre-commit failure: metadata must not claim recovery.
@@ -277,15 +297,15 @@ impl Studio {
                 let stale = t
                     .saved
                     .as_ref()
-                    .is_none_or(|(rev, snap)| *rev != t.doc.rev() || *snap != snapshot_of(&t.doc));
+                    .is_none_or(|saved| saved.needs_write(&t.doc));
                 if stale {
                     let Ok(text) = t.doc.to_svg() else { return };
                     match write(&f, &text) {
                         Ok(()) => {
-                            t.saved = Some((t.doc.rev(), snapshot_of(&t.doc)));
+                            t.saved = Some(RecoveryState::current(&t.doc));
                         }
                         Err(error) if zigzag::file_replace::replacement_committed(&error) => {
-                            t.saved = None;
+                            t.saved = Some(RecoveryState::Retry);
                             durable = false;
                         }
                         Err(_) => return,
@@ -486,7 +506,7 @@ impl Studio {
         // What's on disk is what's open: nothing to write until it changes.
         self.session.saved_doc = self
             .modified
-            .then(|| (self.doc.rev(), snapshot_of(&self.doc)));
+            .then(|| RecoveryState::current(&self.doc));
         self.dirty = true;
         true
     }
@@ -730,10 +750,72 @@ mod tests {
     }
 
     #[test]
+    fn saving_after_uncertain_recovery_removes_sidecars() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        for inactive in [false, true] {
+            let dir = tempfile::tempdir()?;
+            let mut s = recovery_edit_fixture(dir.path(), inactive)?;
+            let sidecar = dir.path().join("recovery.svg");
+            s.write_session_with(|path, text| {
+                write_atomic(path, text)?;
+                if path == sidecar {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        zigzag::file_replace::DurabilityError {
+                            destination: path.to_path_buf(),
+                            source: std::io::Error::other("injected post-commit sync failure"),
+                        },
+                    ));
+                }
+                Ok(())
+            });
+            ensure!(sidecar.exists(), "committed sidecar fixture is missing");
+            // A failed retry must not forget the file that already committed.
+            s.write_session_with(|_, _| Err(std::io::Error::other("retry failed before commit")));
+            ensure!(sidecar.exists(), "failed retry removed committed sidecar");
+            if inactive {
+                s.switch_tab(0);
+            }
+            ensure!(
+                matches!(s.session.saved_doc.as_ref(), Some(RecoveryState::Retry)),
+                "uncertain sidecar presence was lost"
+            );
+            s.save(None)?;
+            ensure!(!s.modified, "normal Save did not succeed");
+            if inactive {
+                s.switch_tab(1);
+            }
+            s.write_session();
+            ensure!(
+                !sidecar.exists(),
+                "successful Save retained recovery (inactive={inactive})"
+            );
+            let mut restored = studio_in(dir.path());
+            ensure!(restored.restore_session(), "saved session did not restore");
+            if inactive {
+                restored.switch_tab(0);
+            }
+            ensure!(
+                restored.doc.shapes.len() == 1 && !restored.modified,
+                "saved design was not restored clean"
+            );
+            // Unknown orphans may hold unadvertised work after a crash. Only
+            // clean up files this session knows it committed or restored.
+            std::fs::write(&sidecar, b"unknown recovery bytes")?;
+            s.write_session();
+            ensure!(
+                std::fs::read(&sidecar).context("unknown recovery was deleted")? == b"unknown recovery bytes",
+                "unknown orphan was deleted"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn committed_recovery_warnings_publish_metadata_and_retry() -> anyhow::Result<()> {
         use anyhow::{Context, ensure};
         for inactive in [false, true] {
-            for warn_metadata in [false, true] {
+            for (warn_recovery, warn_metadata) in [(true, false), (true, true), (false, true)] {
                 let dir = tempfile::tempdir()?;
                 let file = dir.path().join("design.svg");
                 let mut s = recovery_edit_fixture(dir.path(), inactive)?;
@@ -743,7 +825,7 @@ mod tests {
                 s.write_session_with(|path, text| {
                     write_atomic(path, text)?;
                     let is_meta = path.file_name().is_some_and(|name| name == "session.json");
-                    if !is_meta || warn_metadata {
+                    if (!is_meta && warn_recovery) || (is_meta && warn_metadata) {
                         if is_meta {
                             metadata_warnings += 1;
                         } else {
@@ -759,7 +841,10 @@ mod tests {
                     }
                     Ok(())
                 });
-                ensure!(recovery_warnings == 1, "recovery warning was not injected");
+                ensure!(
+                    recovery_warnings == usize::from(warn_recovery),
+                    "recovery warning was not injected"
+                );
                 ensure!(
                     metadata_warnings == usize::from(warn_metadata),
                     "metadata publication was skipped"
@@ -774,17 +859,24 @@ mod tests {
                     s.session.saved_meta.is_none(),
                     "uncertainty cached as durable metadata"
                 );
-                if inactive {
-                    ensure!(
-                        s.tabs.list.first().context("parked tab")?.saved.is_none(),
-                        "uncertain inactive recovery cached"
-                    );
+                let saved = if inactive {
+                    s.tabs
+                        .list
+                        .first()
+                        .context("parked warning")?
+                        .saved
+                        .as_ref()
                 } else {
-                    ensure!(
-                        s.session.saved_doc.is_none(),
-                        "uncertain active recovery cached"
-                    );
-                }
+                    s.session.saved_doc.as_ref()
+                };
+                ensure!(
+                    matches!(saved, Some(RecoveryState::Retry)) == warn_recovery,
+                    "wrong recovery retry state"
+                );
+                ensure!(
+                    matches!(saved, Some(RecoveryState::Current(..))) != warn_recovery,
+                    "metadata-only warning invalidated current recovery"
+                );
                 let mut restored = studio_in(dir.path());
                 ensure!(restored.restore_session(), "session not restored");
                 if inactive {
@@ -803,6 +895,15 @@ mod tests {
                 ensure!(
                     s.session.saved_meta.is_some(),
                     "successful retry not cached"
+                );
+                let saved = if inactive {
+                    s.tabs.list.first().context("parked retry")?.saved.as_ref()
+                } else {
+                    s.session.saved_doc.as_ref()
+                };
+                ensure!(
+                    matches!(saved, Some(RecoveryState::Current(..))),
+                    "retry did not refresh recovery snapshot"
                 );
                 ensure!(
                     s.keep_session_at(14.0, false).is_none(),
