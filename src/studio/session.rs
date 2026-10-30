@@ -229,6 +229,10 @@ impl Studio {
 
     /// Write the session now.
     pub(crate) fn write_session(&mut self) {
+        self.write_session_with(write_atomic);
+    }
+
+    fn write_session_with(&mut self, mut write: impl FnMut(&Path, &str) -> std::io::Result<()>) {
         self.session.due = None;
         let (Some(json), Some(svg)) = (
             self.session.file("session.json"),
@@ -236,15 +240,24 @@ impl Studio {
         ) else {
             return;
         };
+        // Any incomplete or uncertain write must remain eligible for retry,
+        // even when an inactive tab's metadata payload is already unchanged.
+        self.session.saved_meta = None;
+        let mut durable = true;
         let recovery = self.modified;
         if self.doc_unsaved_changed() {
             if recovery {
-                match self.doc.to_svg() {
-                    Ok(text) if write_atomic(&svg, &text).is_ok() => {
+                let Ok(text) = self.doc.to_svg() else { return };
+                match write(&svg, &text) {
+                    Ok(()) => {
                         self.session.saved_doc = Some((self.doc.rev(), snapshot_of(&self.doc)));
                     }
-                    // Couldn't keep it: try again next change.
-                    _ => return,
+                    Err(error) if zigzag::file_replace::replacement_committed(&error) => {
+                        self.session.saved_doc = None;
+                        durable = false;
+                    }
+                    // Pre-commit failure: metadata must not claim recovery.
+                    Err(_) => return,
                 }
             } else {
                 let _ = std::fs::remove_file(&svg);
@@ -266,11 +279,16 @@ impl Studio {
                     .as_ref()
                     .is_none_or(|(rev, snap)| *rev != t.doc.rev() || *snap != snapshot_of(&t.doc));
                 if stale {
-                    match t.doc.to_svg() {
-                        Ok(text) if write_atomic(&f, &text).is_ok() => {
+                    let Ok(text) = t.doc.to_svg() else { return };
+                    match write(&f, &text) {
+                        Ok(()) => {
                             t.saved = Some((t.doc.rev(), snapshot_of(&t.doc)));
                         }
-                        _ => return,
+                        Err(error) if zigzag::file_replace::replacement_committed(&error) => {
+                            t.saved = None;
+                            durable = false;
+                        }
+                        Err(_) => return,
                     }
                 }
             } else if t.saved.take().is_some() {
@@ -278,10 +296,13 @@ impl Studio {
             }
         }
         let meta = self.session_meta(recovery);
-        if let Ok(text) = serde_json::to_string_pretty(&meta)
-            && write_atomic(&json, &text).is_ok()
-        {
-            self.session.saved_meta = Some(meta);
+        if let Ok(text) = serde_json::to_string_pretty(&meta) {
+            // Publish even after a committed recovery warning: restart needs
+            // these flags. Cache only when every write confirmed durability.
+            let result = write(&json, &text);
+            if result.is_ok() && durable {
+                self.session.saved_meta = Some(meta);
+            }
         }
     }
 
@@ -624,6 +645,177 @@ impl Studio {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn recovery_edit_fixture(dir: &Path, inactive: bool) -> anyhow::Result<Studio> {
+        use anyhow::ensure;
+        let file = dir.join("design.svg");
+        std::fs::write(&file, SVG)?;
+        let mut s = studio_in(dir);
+        s.load(&file);
+        ensure!(s.doc.shapes.len() == 2, "saved fixture did not load");
+        if inactive {
+            s.new_tab();
+        }
+        s.write_session();
+        let before: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("session.json"))?)?;
+        ensure!(
+            before["tabs"][0]["recovery"] == false,
+            "fixture already advertised recovery"
+        );
+        if inactive {
+            s.switch_tab(0);
+        }
+        s.structural(|doc| doc.delete(0))?;
+        if inactive {
+            s.switch_tab(1);
+        }
+        Ok(s)
+    }
+
+    #[test]
+    fn precommit_recovery_failure_keeps_metadata_and_retry() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        for inactive in [false, true] {
+            let dir = tempfile::tempdir()?;
+            let mut s = recovery_edit_fixture(dir.path(), inactive)?;
+            let metadata = dir.path().join("session.json");
+            let before = std::fs::read(&metadata)?;
+            let mut attempts = 0;
+            let mut published = false;
+            s.write_session_with(|path, _| {
+                published |= path.file_name().is_some_and(|name| name == "session.json");
+                attempts += 1;
+                Err(std::io::Error::other("injected pre-commit failure"))
+            });
+            ensure!(
+                attempts == 1 && !published,
+                "pre-commit failure published metadata"
+            );
+            ensure!(
+                std::fs::read(&metadata)? == before,
+                "metadata changed on failed write"
+            );
+            ensure!(
+                !dir.path().join("recovery.svg").exists(),
+                "pre-commit fixture wrote recovery"
+            );
+            ensure!(
+                s.session.saved_meta.is_none(),
+                "failed write suppressed retry"
+            );
+            ensure!(
+                s.keep_session_at(10.0, false).is_some(),
+                "retry was not scheduled"
+            );
+            s.keep_session_at(12.0, false);
+            ensure!(
+                s.session.saved_meta.is_some(),
+                "successful retry not cached"
+            );
+            let mut restored = studio_in(dir.path());
+            ensure!(
+                restored.restore_session(),
+                "retry did not publish restorable session"
+            );
+            if inactive {
+                restored.switch_tab(0);
+            }
+            ensure!(
+                restored.doc.shapes.len() == 1 && restored.modified,
+                "retry lost edit"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn committed_recovery_warnings_publish_metadata_and_retry() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        for inactive in [false, true] {
+            for warn_metadata in [false, true] {
+                let dir = tempfile::tempdir()?;
+                let file = dir.path().join("design.svg");
+                let mut s = recovery_edit_fixture(dir.path(), inactive)?;
+                let metadata = dir.path().join("session.json");
+                let mut recovery_warnings = 0;
+                let mut metadata_warnings = 0;
+                s.write_session_with(|path, text| {
+                    write_atomic(path, text)?;
+                    let is_meta = path.file_name().is_some_and(|name| name == "session.json");
+                    if !is_meta || warn_metadata {
+                        if is_meta {
+                            metadata_warnings += 1;
+                        } else {
+                            recovery_warnings += 1;
+                        }
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::PermissionDenied,
+                            zigzag::file_replace::DurabilityError {
+                                destination: path.to_path_buf(),
+                                source: std::io::Error::other("injected post-commit sync failure"),
+                            },
+                        ));
+                    }
+                    Ok(())
+                });
+                ensure!(recovery_warnings == 1, "recovery warning was not injected");
+                ensure!(
+                    metadata_warnings == usize::from(warn_metadata),
+                    "metadata publication was skipped"
+                );
+                let published: serde_json::Value =
+                    serde_json::from_str(&std::fs::read_to_string(&metadata)?)?;
+                ensure!(
+                    published["tabs"][0]["recovery"] == true,
+                    "committed recovery was not advertised"
+                );
+                ensure!(
+                    s.session.saved_meta.is_none(),
+                    "uncertainty cached as durable metadata"
+                );
+                if inactive {
+                    ensure!(
+                        s.tabs.list.first().context("parked tab")?.saved.is_none(),
+                        "uncertain inactive recovery cached"
+                    );
+                } else {
+                    ensure!(
+                        s.session.saved_doc.is_none(),
+                        "uncertain active recovery cached"
+                    );
+                }
+                let mut restored = studio_in(dir.path());
+                ensure!(restored.restore_session(), "session not restored");
+                if inactive {
+                    restored.switch_tab(0);
+                }
+                ensure!(
+                    restored.doc.shapes.len() == 1 && restored.modified,
+                    "committed edit was lost on restart"
+                );
+                restored.keep_session_at(0.0, false);
+                ensure!(
+                    s.keep_session_at(10.0, false).is_some(),
+                    "equal metadata suppressed retry"
+                );
+                s.keep_session_at(12.0, false);
+                ensure!(
+                    s.session.saved_meta.is_some(),
+                    "successful retry not cached"
+                );
+                ensure!(
+                    s.keep_session_at(14.0, false).is_none(),
+                    "successful retry never settles"
+                );
+                ensure!(
+                    std::fs::read_to_string(&file)? == SVG,
+                    "original saved file changed"
+                );
+            }
+        }
+        Ok(())
+    }
 
     fn studio_in(dir: &Path) -> Studio {
         let mut s = Studio::with_file(None, None);
