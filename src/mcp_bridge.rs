@@ -71,9 +71,14 @@ fn error_reply(line: &str, message: &str) -> Option<String> {
     };
     // MCP 2025-06-18 permits one message, string/integer IDs, object params.
     // Invalid envelopes are not notifications and must not be silently dropped.
-    let valid_id = request
-        .get("id")
-        .is_none_or(|id| id.is_string() || id.is_i64() || id.is_u64());
+    let valid_id = request.get("id").is_none_or(|id| {
+        id.is_string()
+            || id.is_i64()
+            || id.is_u64()
+            || id
+                .as_f64()
+                .is_some_and(|n| n.is_finite() && n.fract() == 0.0)
+    });
     if !request.is_object()
         || request.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
         || request.get("method").and_then(Value::as_str).is_none()
@@ -163,6 +168,7 @@ mod tests {
             json!(0),
             json!(-17),
             json!(u64::MAX),
+            json!(17.0),
             json!("job,part-2}"),
             json!("quote\"slash\\brace}comma,"),
         ] {

@@ -24,3 +24,8 @@ Validation (Windows, rustc 1.98.0, locked): the escaped-ID/message test FAILS
 on unpatched source with `expected comma or closing brace`. Candidate
 `cargo test --locked --bin zigzag-mcp`: 2 PASS. Independent review and
 cross-platform execution remain pending. No claim of full MCP conformance.
+
+Numeric-encoding review: a whole decimal encoding (`17.0`) is an integer value,
+not a fractional ID. Added a round-trip test that initially failed the new
+envelope check; corrected it to accept whole numeric values while still rejecting
+`1.5`. The value is serialized unchanged rather than coerced into another ID.
