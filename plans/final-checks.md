@@ -22,3 +22,11 @@ Completion requires actual review/check outcomes or an explicit external block.
 Do not call review requests approvals, cross-compilation execution, library tests
 GUI qualification, or simulator tests physical-machine evidence. Keep all working
 and clean candidates current if a correction changes product code.
+
+Fresh review 4422511596 requires #2 caller repair before completion: recovery
+writes must distinguish committed-but-uncertain from pre-commit errors. Continue
+publishing recovery metadata for active and inactive tabs after commit, but do
+not cache uncertain recovery or metadata as durable. Invalidate metadata caching
+so an equal metadata payload cannot suppress retries. Add deterministic real
+write/restore tests with a private injected writer, including pre-commit failure,
+and qualify the repaired Studio caller on native Mac as well as locally.
