@@ -116,9 +116,9 @@ pub struct Studio {
     pub(crate) open_issues: bool,
     /// Stitch rendering generation, including temporary transformed previews.
     pub(crate) replans: u64,
-    /// Completed stitch plans, excluding renderer-only generation changes.
+    /// Accepted successful plans, excluding stale results and render-only changes.
     #[cfg(test)]
-    pub(crate) completed_plans: u64,
+    pub(crate) accepted_plans: u64,
     /// What the last plan can lend the next (see `PlanCache`).
     pub(crate) plan_cache: zigzag::design::PlanCache,
     /// An MCP batch is running: edits re-plan once at its end (or before a
@@ -294,7 +294,7 @@ impl Studio {
             open_issues: false,
             replans: 0,
             #[cfg(test)]
-            completed_plans: 0,
+            accepted_plans: 0,
             plan_cache: Default::default(),
             batching: false,
             planner: Default::default(),
@@ -435,7 +435,7 @@ impl Studio {
         self.replans += 1;
         #[cfg(test)]
         {
-            self.completed_plans += 1;
+            self.accepted_plans += 1;
         }
         // A slow plan sends the next ones to the worker; one made here
         // supersedes any still out.
