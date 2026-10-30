@@ -93,7 +93,11 @@ fn error_reply(line: &str, message: &str) -> Option<String> {
         .get("params")
         .is_some_and(|params| !params.is_object())
     {
-        return error(Value::Null, -32600, "Invalid request for MCP 2025-06-18");
+        return error(
+            id.clone(),
+            -32602,
+            "Invalid params: MCP parameters must be an object",
+        );
     }
     error(id.clone(), -32000, message)
 }
@@ -212,7 +216,6 @@ mod tests {
             json!({"jsonrpc":"2.0","id":null,"method":"ping"}),
             json!({"jsonrpc":"2.0","id":1.5,"method":"ping"}),
             json!({"jsonrpc":"2.0","id":{},"method":"ping"}),
-            json!({"jsonrpc":"2.0","id":1,"method":"ping","params":[]}),
         ] {
             let result = reply(&invalid.to_string(), message)?;
             ensure!(
@@ -231,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn bridge_does_not_reply_to_notifications_with_invalid_parameters() -> anyhow::Result<()> {
+    fn bridge_parameter_errors_preserve_ids_and_suppress_notifications() -> anyhow::Result<()> {
         for params in [json!([]), json!(null), json!(3), json!("invalid")] {
             let notification =
                 json!({"jsonrpc": "2.0", "method": "notifications/initialized", "params": params});
@@ -239,11 +242,15 @@ mod tests {
                 error_reply(&notification.to_string(), "unavailable").is_none(),
                 "invalid-parameter notification received a reply"
             );
-            let request = json!({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": params});
-            ensure!(
-                reply(&request.to_string(), "unavailable")?["error"]["code"] == -32600,
-                "request parameter error lost"
-            );
+            for id in [json!(1), json!("job-7")] {
+                let request =
+                    json!({"jsonrpc": "2.0", "id": id, "method": "ping", "params": params});
+                let response = reply(&request.to_string(), "unavailable")?;
+                ensure!(
+                    response["error"]["code"] == -32602 && response["id"] == id,
+                    "parameter error lost its request ID: {response}"
+                );
+            }
         }
         Ok(())
     }
