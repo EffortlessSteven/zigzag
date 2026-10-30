@@ -62,13 +62,23 @@ explanation, and reconcile any claim affected by the selected candidate. Keep
 this preparation record and all campaign plans out of the submitted diff.
 Independent review remains independent work, not something supplied by extraction.
 
-## Static-preflight coverage follow-up
+## Optional schema topic stacked on batching
 
-Review 5710300411 identifies an integration-only regression omitted from the
-clean #3/#5 combination: integrated_schemas_reject_static_batch_input_before_any_edit.
-Keep standalone topics independent. Prepare an optional schema-after-batches
-branch based on clean #3, with clean #5 and the existing regression. Verify its
-product tree against direct composition 6b35cab plus only that test. Run its MCP
-tests and demonstrate that dropping static schema preflight fails the unchanged
-planning-count assertion rather than merely relying on rollback. This is coverage
-packaging, not a new production defect or authority to submit either topic.
+Review 5710300411 identified an integration-only regression omitted from the
+initial clean #3/#5 combination. It is now preserved in
+[prepare/schema-after-batches](https://github.com/EffortlessSteven/zigzag/tree/prepare/schema-after-batches)
+at `49fa25905d52e5f3b46aac3c2c0fa9a505710eb6`, based on clean #3. The standalone #3 and #5
+branches remain available independently; this is an optional submission order,
+not another contribution or a dependency forced onto standalone validation.
+
+The complete product tree matches direct composition 6b35cab plus exactly the
+existing 23-line integrated_schemas_reject_static_batch_input_before_any_edit test.
+No production change or fork plan was added. Windows Rust 1.95 MCP tool selection
+passes all 28 tests. Replacing full static preflight with name-only validation
+fails `static type error admitted earlier edits`, so rollback cannot conceal
+execution. Restoring the source passes all 28 again. The broader integrated
+source already contains this test and is unchanged by this packaging work.
+
+Local proof is in `.git/qualification/stacked-schema*.json` and logs. No fresh
+Linux standalone run is claimed. Preserve this stacked test when selecting both
+contributions; its preflight guarantee depends on their combined behavior.

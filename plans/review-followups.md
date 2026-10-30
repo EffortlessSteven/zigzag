@@ -43,3 +43,7 @@ proof for the actual extracted contribution before Steven authorizes submission.
 Clean branches and their proof are in [contribution preparation](upstream-preparation.md).
 Their product trees match the reviewed topics; extraction is not independent
 approval or authorization to submit.
+
+The integration-only static-schema preflight regression is now carried in the
+optional clean schema-after-batches stack. Its 28 MCP tests pass and the
+preflight-removal control fails; see contribution preparation for the exact head.
