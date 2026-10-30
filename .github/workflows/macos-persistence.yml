@@ -18,7 +18,7 @@ jobs:
           persist-credentials: false
       - name: Install declared minimum Rust
         run: rustup toolchain install 1.95.0 --profile minimal
-      - name: Test native library and filesystem behavior
+      - name: Test native library and recovery behavior
         shell: bash
         run: |
           set -euo pipefail
@@ -29,10 +29,12 @@ jobs:
             rustc +1.95.0 -Vv
             git rev-parse HEAD
             git rev-parse HEAD:src/file_replace.rs
+            git rev-parse HEAD:src/studio/session.rs
             shasum -a 256 Cargo.lock
             df -h "${TMPDIR:-/tmp}"
           } | tee qualification-results/environment.txt
           cargo +1.95.0 test --locked --lib -- --nocapture 2>&1 | tee qualification-results/library.log
+          cargo +1.95.0 test --locked --features gui --bin zigzag-studio recovery_ -- --nocapture 2>&1 | tee qualification-results/recovery.log
       - name: Keep exact native qualification output
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
