@@ -89,12 +89,15 @@ enum Event {
     Line(String),
     Stderr(String),
     Exit(Option<i32>),
+    StdoutClosed,
 }
 
 struct Run {
     child: Arc<Mutex<Child>>,
     rx: Receiver<Event>,
     stderr: Vec<String>,
+    exit: Option<Option<i32>>,
+    stdout_closed: bool,
 }
 
 #[derive(Default)]
@@ -440,6 +443,7 @@ impl AgentState {
             let _ = stdin.write_all(prompt.as_bytes());
         }
         let (tx, rx) = mpsc::channel();
+        let stdout_closed = child.stdout.is_none();
         if let Some(out) = child.stdout.take() {
             let tx = tx.clone();
             let ctx = ctx.clone();
@@ -448,6 +452,10 @@ impl AgentState {
                     let _ = tx.send(Event::Line(line));
                     ctx.request_repaint();
                 }
+                // This sender's EOF follows every stdout line. Process exit
+                // is reported by another thread and may arrive before them.
+                let _ = tx.send(Event::StdoutClosed);
+                ctx.request_repaint();
             });
         }
         let child = Arc::new(Mutex::new(child));
@@ -478,13 +486,14 @@ impl AgentState {
             child,
             rx,
             stderr: Vec::new(),
+            exit: None,
+            stdout_closed,
         });
     }
 
     /// Take in what the agent printed since last frame.
     pub fn poll(&mut self) {
         let Some(run) = &mut self.run else { return };
-        let mut ended = None;
         let mut lines = Vec::new();
         while let Ok(ev) = run.rx.try_recv() {
             match ev {
@@ -495,9 +504,11 @@ impl AgentState {
                         run.stderr.remove(0);
                     }
                 }
-                Event::Exit(code) => ended = Some(code),
+                Event::Exit(code) => run.exit = Some(code),
+                Event::StdoutClosed => run.stdout_closed = true,
             }
         }
+        let ended = if run.stdout_closed { run.exit } else { None };
         for l in lines {
             let Ok(v) = serde_json::from_str::<Value>(&l) else {
                 continue;
@@ -1671,6 +1682,76 @@ mod tests {
             Some("-"),
             "prompt on stdin last"
         );
+    }
+
+    #[test]
+    fn process_exit_waits_for_unread_stdout() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let child = Arc::new(Mutex::new(
+            Command::new(std::env::current_exe()?)
+                .args(["--exact", "agent::tests::agent_process_fixture"])
+                .env_remove("ZIGZAG_TEST_AGENT_FIXTURE")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?,
+        ));
+        let result = (|| -> anyhow::Result<()> {
+            for exit_first in [true, false] {
+                let (tx, rx) = mpsc::channel();
+                let mut agent = AgentState {
+                    kind: AgentKind::Claude,
+                    run: Some(Run {
+                        child: child.clone(),
+                        rx,
+                        stderr: Vec::new(),
+                        exit: None,
+                        stdout_closed: false,
+                    }),
+                    ..Default::default()
+                };
+                if exit_first {
+                    tx.send(Event::Exit(Some(0)))?;
+                    agent.poll();
+                    ensure!(agent.running(), "process exit discarded unread stdout");
+                }
+                for event in [
+                    serde_json::json!({"type":"system", "subtype":"init", "session_id":"s1"}),
+                    serde_json::json!({"type":"assistant", "message":{"content":[{"type":"text", "text":"last output"}]}}),
+                    serde_json::json!({"type":"result", "subtype":"success", "is_error":false, "num_turns":1, "duration_ms":10}),
+                ] {
+                    tx.send(Event::Line(event.to_string()))?;
+                }
+                tx.send(Event::StdoutClosed)?;
+                agent.poll();
+                if !exit_first {
+                    ensure!(agent.running(), "stdout EOF was mistaken for process exit");
+                    tx.send(Event::Exit(Some(0)))?;
+                    agent.poll();
+                }
+                ensure!(!agent.running(), "completed child stayed active");
+                ensure!(
+                    agent.session.as_deref() == Some("s1"),
+                    "late session was lost"
+                );
+                ensure!(
+                    agent.log.contains(&Entry::Said("last output".into())),
+                    "late output was lost"
+                );
+                ensure!(
+                    matches!(agent.log.last(), Some(Entry::Done(summary)) if !summary.is_empty()),
+                    "streamed completion was replaced by a generic exit"
+                );
+            }
+            Ok(())
+        })();
+        let cleanup = child
+            .lock()
+            .map_err(|_| anyhow::anyhow!("child lock poisoned"))?
+            .wait();
+        result?;
+        cleanup?;
+        Ok(())
     }
 
     #[test]

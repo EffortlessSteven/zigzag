@@ -28,3 +28,19 @@ No global environment mutation or executable script remains in this fixture.
 The child gets its marker through Command::env and reads stdin to EOF. Timeout
 kills the owned child before returning an error. Real installed-agent permission
 and CLI compatibility claims are outside this test.
+
+The integrated Rust 1.95 run reproduced a real adapter race: the test saw only
+Done("") and no streamed session. Exit arrives from the stderr/process-wait
+thread, independently of stdout delivery, and poll drops Run on that event.
+Revise this topic into the complete output-completion fix: retain process exit
+until stdout EOF is observed after all lines. A deterministic event-order test
+must reject exit-before-lines on the old adapter and cover both arrival orders.
+The portable child fixture remains the end-to-end proof of the same behavior.
+Client permissions and agent command construction are still out of scope.
+
+The deterministic exit-first test failed before EOF tracking (`process exit
+discarded unread stdout`). Run now retains exit independently of stdout EOF;
+completion waits for both. The test also covers EOF-before-exit, late session,
+assistant output, and the actual streamed completion rather than generic Done.
+All 15 standalone Windows agent tests pass. Earlier native Linux tests passed
+before the EOF correction; final integrated cross-platform qualification follows.
