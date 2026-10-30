@@ -2236,6 +2236,29 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn integrated_schemas_reject_static_batch_input_before_any_edit() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        s.replan();
+        let plans = s.replans;
+        for step in [
+            json!({"tool": "add_text", "arguments": {"text": "ZigZag", "size_mm": "large"}}),
+            json!({"tool": "render_preview", "arguments": {"width_px": 900.5}}),
+            json!({"tool": "set_object", "arguments": {"object": 0, "spacing_mm": "tight"}}),
+            json!({"tool": "add_text", "arguments": {"bold": true}}),
+            json!({"tool": "get_design", "arguments": []}),
+        ] {
+            let result = s.run_tool("batch", &json!({"steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}}, step
+            ]}));
+            ensure!(result.is_error, "invalid static arguments accepted");
+            ensure!(s.replans == plans, "static type error admitted earlier edits");
+            ensure!(s.doc.shapes.is_empty() && s.undo.is_empty() && !s.modified, "static rejection changed the design");
+        }
+        Ok(())
+    }
+
     fn tab_state(s: &Studio) -> Value {
         json!({
             "active": s.active_tab(),
