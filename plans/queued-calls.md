@@ -28,3 +28,16 @@ start, start before timeout), deadline admission, no double start and later
 completion of an uncertain operation. MCP tools (12) PASS, including the normal
 HTTP workflow. Windows/rustc 1.98.0, locked dependencies. No sleeps in the new
 tests. Independent review, Mac and hardware checks remain pending/not run.
+
+Final race review adds a real HTTP start/commit gate: execute the edit, observe
+the four committed shapes, withhold completion/reply, and let the injected
+five-second response wait expire. The reply must say outcome unknown, never
+no-effect cancellation. This is a preservation/integration test, not a claim
+that every part reproduces on the old API.
+
+A negative control replaced the shared execution Arc with separate UI state.
+The new test FAILS: a committed operation is falsely reported as expired before
+starting. Restoring shared state makes it pass. Review also checked deadline
+sampling under the admission lock, expiry-first/start-first ordering, completed
+reply races, and poisoned-state behavior. No production change was needed in
+this pass. This is implementation-owner review; independent approval is pending.
