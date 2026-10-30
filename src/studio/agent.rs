@@ -1750,6 +1750,8 @@ mod tests {
         Ok(())
     }
 
+    const SEND_FIXTURE_COMPLETED: &[u8] = b"zigzag-send-fixture-completed-v1";
+
     #[test]
     fn send_process_fixture() -> anyhow::Result<()> {
         use anyhow::{Context, ensure};
@@ -1804,6 +1806,9 @@ mod tests {
             std::fs::canonicalize(actual)? == std::fs::canonicalize(expected)?,
             "send launched a different executable"
         );
+        // A successful libtest exit alone also permits an unmatched filter or
+        // this fixture's intentional no-op path. Witness every assertion above.
+        std::fs::write(input.with_extension("complete"), SEND_FIXTURE_COMPLETED)?;
         Ok(())
     }
 
@@ -1843,6 +1848,7 @@ mod tests {
             std::fs::copy(&program, decoy.join("claude"))?;
             #[cfg(windows)]
             std::fs::copy(&program, decoy.join("claude.exe"))?;
+            let input = dir.join("stdin");
             let output = Command::new(std::env::current_exe()?)
                 .args([
                     "--exact",
@@ -1851,7 +1857,7 @@ mod tests {
                 ])
                 .env("ZIGZAG_SEND_FIXTURE", "1")
                 .env("ZIGZAG_CLAUDE", &program)
-                .env("ZIGZAG_AGENT_STDIN", dir.join("stdin"))
+                .env("ZIGZAG_AGENT_STDIN", &input)
                 .env("PATH", &decoy)
                 .output().context("running isolated send fixture")?;
             ensure!(
@@ -1859,6 +1865,12 @@ mod tests {
                 "send process fixture failed: {} {}",
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
+            );
+            let completion = std::fs::read(input.with_extension("complete"))
+                .context("send fixture did not complete its assertions")?;
+            ensure!(
+                completion == SEND_FIXTURE_COMPLETED,
+                "invalid send fixture completion witness"
             );
             Ok(())
         })();
