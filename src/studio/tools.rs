@@ -1997,6 +1997,8 @@ mod tests {
 
 
 
+
+
     fn tab_state(s: &Studio) -> Value {
         json!({
             "active": s.active_tab(),
@@ -2319,6 +2321,51 @@ mod tests {
         ensure!(
             s.doc.to_svg()? == before,
             "invalid resolved batch not rolled back"
+        );
+        Ok(())
+    }
+
+
+
+
+    #[test]
+    fn expired_http_call_never_executes_when_ui_resumes() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let server = crate::mcp::start_with_timeout(
+            0,
+            tool_specs(),
+            INSTRUCTIONS.into(),
+            || {},
+            std::time::Duration::ZERO,
+        )?;
+        let port = server.addr.port();
+        let mut s = Studio::with_file(None, None);
+        s.mcp = Some(server);
+        let body = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add_svg","arguments":{"svg":BADGE}}}).to_string();
+        let mut socket = std::net::TcpStream::connect(("127.0.0.1", port))?;
+        socket.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+        write!(
+            socket,
+            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )?;
+        let mut response = String::new();
+        socket.read_to_string(&mut response)?;
+        // The HTTP timeout has returned, while UI dispatch has been withheld.
+        s.handle_mcp();
+        ensure!(
+            s.doc.shapes.is_empty() && s.undo.is_empty(),
+            "expired queued edit executed after timeout"
+        );
+        let (_, body) = response.split_once("\r\n\r\n").context("HTTP reply")?;
+        let reply: Value = serde_json::from_str(body)?;
+        ensure!(reply["result"]["isError"] == true, "timeout was successful");
+        ensure!(
+            text(&ToolResult::text(
+                reply["result"]["content"][0]["text"].as_str().unwrap_or("")
+            ))
+            .contains("before starting"),
+            "missing no-effect verdict"
         );
         Ok(())
     }
