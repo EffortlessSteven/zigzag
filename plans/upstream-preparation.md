@@ -61,3 +61,14 @@ Use the clean branch and its necessary dependency, preserve the effective PR
 explanation, and reconcile any claim affected by the selected candidate. Keep
 this preparation record and all campaign plans out of the submitted diff.
 Independent review remains independent work, not something supplied by extraction.
+
+## Static-preflight coverage follow-up
+
+Review 5710300411 identifies an integration-only regression omitted from the
+clean #3/#5 combination: integrated_schemas_reject_static_batch_input_before_any_edit.
+Keep standalone topics independent. Prepare an optional schema-after-batches
+branch based on clean #3, with clean #5 and the existing regression. Verify its
+product tree against direct composition 6b35cab plus only that test. Run its MCP
+tests and demonstrate that dropping static schema preflight fails the unchanged
+planning-count assertion rather than merely relying on rollback. This is coverage
+packaging, not a new production defect or authority to submit either topic.
