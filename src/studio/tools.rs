@@ -14,11 +14,11 @@ use zigzag::svg::{Geometry, Part};
 
 pub const INSTRUCTIONS: &str = "ZigZag is a machine-embroidery editor showing live documents on a hoop, one per tab; the tools work on the one in front (list_documents, switch_document, new_document). \
 Coordinates are millimetres from the hoop center (+x right, +y down). The person watching sees every change, and each tool call is one undo step. \
-Typical flow: get_design → add_svg (any SVG artwork) and add_text (lettering) → transform_objects to size and place → set_object to choose stitch types → render_preview to look at the stitches → check_design → save, or export (machine file or html worksheet). \
-Stitch types: fill (tatami rows; areas wider than ~7 mm), satin (glossy zigzag columns 1–7 mm wide; works on strokes, and on narrow filled shapes like letters, bars and rings), run (thin running stitch for details), \
+Typical flow: get_design â†’ add_svg (any SVG artwork) and add_text (lettering) â†’ transform_objects to size and place â†’ set_object to choose stitch types â†’ render_preview to look at the stitches â†’ check_design â†’ save, or export (machine file or html worksheet). \
+Stitch types: fill (tatami rows; areas wider than ~7 mm), satin (glossy zigzag columns 1â€“7 mm wide; works on strokes, and on narrow filled shapes like letters, bars and rings), run (thin running stitch for details), \
 contour (rows following the outline inward), blanket (E-stitch edge), applique (placement line, stop, tack-down, stop, satin cover) and manual (every path point is a needle point). \
 Settings can also be preset in SVG element ids, e.g. id=\"logo_fill_a=45\" or id=\"border_satin_w=2\". \
-Hat designs are small (about 50 × 50 mm on the front of a cap): keep satin columns under 7 mm wide, letters at least 5 mm tall, and details at least 1.5 mm. \
+Hat designs are small (about 50 Ã— 50 mm on the front of a cap): keep satin columns under 7 mm wide, letters at least 5 mm tall, and details at least 1.5 mm. \
 open_file also opens machine files (pes, dst, exp, jef) as manual stitches. \
 trace_image turns a PNG/JPEG logo into shapes (snap colors to Brother or Janome threads with `threads`). round_corners softens sharp corners, which stitch more cleanly; simplify takes extra points out of outlines (traced ones especially) and clean_up removes stray points, objects too small to sew and extra points across the design. \
 Use batch to make several changes in one call: it is all or nothing and one undo step, and later steps can use earlier results (\"$0.added.0.name\").";
@@ -44,7 +44,7 @@ fn text_props(new: bool) -> Value {
         "v_scale": { "type": "number", "description": "Vertical scale, percent. Default 100." },
         "case": { "type": "string", "enum": ["as", "upper", "lower", "title"], "description": "Letter case applied to the text. Default as typed." },
         "on_path": { "description": "Put the text on an existing path object's outline (the object is then not sewn); null takes it off.", "oneOf": [{ "type": "integer" }, { "type": "string" }, { "type": "null" }] },
-        "path_offset": { "type": "number", "description": "On a path: where the text starts, 0–1 along it." },
+        "path_offset": { "type": "number", "description": "On a path: where the text starts, 0â€“1 along it." },
         "path_flip": { "type": "boolean", "description": "On a path: letters on the other side." },
         "kern": { "type": "array", "description": "Pair kerning: for each, the 0-based character index and how far (mm) to move it and the rest of the line; replaces any kerning set before.", "items": { "type": "object", "properties": { "at": { "type": "integer" }, "mm": { "type": "number" } }, "required": ["at", "mm"] } }
     });
@@ -167,7 +167,7 @@ pub fn tool_specs() -> Value {
         }),
         json!({
             "name": "add_svg",
-            "description": "Add SVG artwork to the canvas (or replace the document). Every filled shape and stroke becomes an object; fills default to fill stitch, strokes to satin (≥1 mm) or run. Settings in element ids apply (e.g. id=\"leaf_satin\"). By default the artwork keeps its own size (viewBox units scaled by width/height attributes, else 1 unit = 1 px) and is centered on the hoop.",
+            "description": "Add SVG artwork to the canvas (or replace the document). Every filled shape and stroke becomes an object; fills default to fill stitch, strokes to satin (â‰¥1 mm) or run. Settings in element ids apply (e.g. id=\"leaf_satin\"). By default the artwork keeps its own size (viewBox units scaled by width/height attributes, else 1 unit = 1 px) and is centered on the hoop.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -193,19 +193,19 @@ pub fn tool_specs() -> Value {
                     "spacing_mm": { "type": ["number", "null"], "description": "Fill/contour row spacing, satin zigzag spacing, or blanket prong spacing." },
                     "length_mm": { "type": ["number", "null"], "description": "Max stitch length for fill and run." },
                     "pull_mm": { "type": ["number", "null"], "description": "Pull compensation per side." },
-                    "width_mm": { "type": ["number", "null"], "description": "Satin width (strokes and borders), appliqué cover width, or blanket prong length." },
+                    "width_mm": { "type": ["number", "null"], "description": "Satin width (strokes and borders), appliquÃ© cover width, or blanket prong length." },
                     "split_mm": { "type": ["number", "null"], "description": "Satin auto-split: split stitches longer than this (0 = off; default 7)." },
                     "border": { "type": ["boolean", "null"], "description": "Satin on a filled shape: true = along its outline, false = across it as a column." },
                     "spiral": { "type": ["boolean", "null"], "description": "Contour fill as one spiral out from the center (or the start point) instead of rings." },
                     "underlay": { "type": ["boolean", "null"] },
-                    "satin_underlay": { "description": "Satin underlay passes, or \"auto\".", "oneOf": [{ "type": "array", "items": { "type": "string", "enum": ["center", "contour", "zigzag"] } }, { "type": "string", "enum": ["auto"] }] },
+                    "satin_underlay": { "description": "Satin underlay passes, or \"auto\"; null also resets to auto.", "oneOf": [{ "type": "array", "items": { "type": "string", "enum": ["center", "contour", "zigzag"] } }, { "type": "string", "enum": ["auto"] }, { "type": "null" }] },
                     "short_stitches": { "type": ["boolean", "null"] },
                     "repeats": { "type": ["integer", "null"], "description": "Running stitch passes: 1 or 3 (bean)." },
                     "color": { "type": ["string", "null"], "description": "Thread color #rrggbb, or null for the SVG's color." },
-                    "start": { "type": ["number", "null"], "description": "Where sewing starts: 0–1 along the object's outline (fills: the outer ring from its first point; lines: from their start). Null: the planner chooses." },
-                    "end": { "type": ["number", "null"], "description": "Where sewing ends, 0–1 along the outline (the thread goes on from there to the next object)." },
+                    "start": { "type": ["number", "null"], "description": "Where sewing starts: 0â€“1 along the object's outline (fills: the outer ring from its first point; lines: from their start). Null: the planner chooses." },
+                    "end": { "type": ["number", "null"], "description": "Where sewing ends, 0â€“1 along the outline (the thread goes on from there to the next object)." },
                     "trim": { "type": ["boolean", "null"], "description": "Cut the thread after this object even if the next one is close." },
-                    "stop": { "type": ["boolean", "null"], "description": "Pause the machine after this object (to lay foam, or trim appliqué fabric)." }
+                    "stop": { "type": ["boolean", "null"], "description": "Pause the machine after this object (to lay foam, or trim appliquÃ© fabric)." }
                 },
                 "required": ["object"]
             }
@@ -233,8 +233,8 @@ pub fn tool_specs() -> Value {
                     "scale": { "type": "number", "description": "Scale factor, e.g. 1.5." },
                     "mirror": { "type": "string", "enum": ["horizontal", "vertical"] },
                     "rotate_deg": { "type": "number", "description": "Clockwise degrees." },
-                    "move_to_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Put the objects' center here [x, y] (mm from hoop center)." },
-                    "move_by_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Shift by [dx, dy] mm." }
+                    "move_to_mm": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Put the objects' center here [x, y] (mm from hoop center)." },
+                    "move_by_mm": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Shift by [dx, dy] mm." }
                 },
                 "required": ["objects"]
             }
@@ -246,7 +246,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "objects": { "description": "One object (index or name) or a list of them.", "oneOf": [{ "type": "integer" }, { "type": "string" }, { "type": "array", "items": { "oneOf": [{ "type": "integer" }, { "type": "string" }] } }] },
-                    "offset_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Where the copies go relative to the originals. Default [3, 3]." }
+                    "offset_mm": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Where the copies go relative to the originals. Default [3, 3]." }
                 },
                 "required": ["objects"]
             }
@@ -290,7 +290,7 @@ pub fn tool_specs() -> Value {
             "name": "switch_document",
             "description": "Bring another open document to the front, so the other tools work on it. By its index from list_documents, or its name.",
             "inputSchema": { "type": "object", "properties": {
-                "index": { "type": "integer" },
+                "index": { "type": "integer", "minimum": 0 },
                 "name": { "type": "string" }
             } }
         }),
@@ -325,7 +325,7 @@ pub fn tool_specs() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "width_px": { "type": "integer", "description": "Image width, 200–2000. Default 900." },
+                    "width_px": { "type": "integer", "description": "Image width, 200â€“2000. Default 900." },
                     "show_jumps": { "type": "boolean", "description": "Draw jump stitches. Default true." },
                     "fit": { "type": "string", "enum": ["design", "hoop"], "description": "Frame the design closely or show the whole hoop. Default design." }
                 }
@@ -371,7 +371,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Absolute path of the image." },
-                    "colors": { "type": "integer", "description": "Thread colors, 2–10. Default: found automatically." },
+                    "colors": { "type": "integer", "description": "Thread colors, 2â€“10. Default: found automatically." },
                     "width_mm": { "type": "number", "description": "Width of the traced artwork. Default: 80% of the hoop." },
                     "x_mm": { "type": "number", "description": "Center x (mm from hoop center). Default 0." },
                     "y_mm": { "type": "number", "description": "Center y. Default 0." },
@@ -379,7 +379,7 @@ pub fn tool_specs() -> Value {
                     "threads": { "type": "string", "enum": ["none", "brother", "janome"], "description": "Snap colors to this thread chart. Default none." },
                     "lines": { "type": "boolean", "description": "Trace thin lines as single lines (run/satin) instead of thin fills. Default false." },
                     "line_width_mm": { "type": "number", "description": "With lines: the widest line traced as a line. Default 1.5." },
-                    "detail": { "type": "number", "description": "0–100, how closely outlines follow the pixels. Default 60." },
+                    "detail": { "type": "number", "description": "0â€“100, how closely outlines follow the pixels. Default 60." },
                     "speckle_mm": { "type": "number", "description": "Drop areas smaller than this across. Default 1." },
                     "replace": { "type": "boolean", "description": "Start a new document with only the trace. Default false." }
                 },
@@ -406,7 +406,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "objects": { "type": "array", "items": obj_schema(), "description": "Objects to simplify." },
-                    "level": { "type": "number", "description": "0–100: 0 for the fewest points, 100 to stay closest to the original (each 10 halves how far the outline may move; 50 is 1 pt). Default: Auto, the level for the objects' size." }
+                    "level": { "type": ["number", "null"], "description": "0â€“100: 0 for the fewest points, 100 to stay closest to the original (each 10 halves how far the outline may move; 50 is 1 pt). Omitted or null: Auto, the level for the objects' size." }
                 },
                 "required": ["objects"]
             }
@@ -512,18 +512,16 @@ fn check_args(name: &str, args: &Value) -> Result<(), String> {
     else {
         return Ok(()); // unknown tools are reported by run_tool
     };
+    let empty = json!({});
+    let args = if args.is_null() { &empty } else { args };
     let Some(obj) = args.as_object() else {
-        return if args.is_null() {
-            Ok(())
-        } else {
-            Err(format!("{name}: arguments must be an object"))
-        };
+        return Err(format!("{name}: arguments must be an object"));
     };
     let props = spec["inputSchema"]["properties"].as_object();
     let known = |k: &str| props.is_some_and(|p| p.contains_key(k));
     let unknown: Vec<&String> = obj.keys().filter(|k| !known(k)).collect();
     if unknown.is_empty() {
-        return Ok(());
+        return crate::tool_args::validate(name, args, specs);
     }
     let mut expected: Vec<&String> = props.map(|p| p.keys().collect()).unwrap_or_default();
     expected.sort();
@@ -549,7 +547,7 @@ fn check_args(name: &str, args: &Value) -> Result<(), String> {
 /// Replace "$N.path" strings in `v` by that field of step N's result.
 fn resolve_refs(v: &Value, results: &[Value]) -> Result<Value, String> {
     Ok(match v {
-        // "$$…" is a literal "$…".
+        // "$$â€¦" is a literal "$â€¦".
         Value::String(s) if s.starts_with("$$") => Value::String(s[1..].to_string()),
         Value::String(s) if s.starts_with('$') => {
             let body = &s[1..];
@@ -877,7 +875,7 @@ impl Studio {
                 self.replan_soon();
                 Ok(ToolResult::text(format!(
                     "Sewing order: {}",
-                    self.names.join(" → ")
+                    self.names.join(" â†’ ")
                 )))
             }),
             "set_document" => self.tool_set_document(args),
@@ -973,7 +971,7 @@ impl Studio {
                 Ok(ToolResult::text(format!(
                     "{} Sewing order: {}",
                     self.status,
-                    self.names.join(" → ")
+                    self.names.join(" â†’ ")
                 )))
             }
             "list_fonts" => {
@@ -1183,7 +1181,7 @@ impl Studio {
         };
         if let Some(n) = args.get("colors").and_then(Value::as_u64) {
             if !(2..=10).contains(&n) {
-                return Err("colors must be 2–10 (or leave it out to find them)".into());
+                return Err("colors must be 2â€“10 (or leave it out to find them)".into());
             }
             o.colors = n as u32;
         }
@@ -1781,12 +1779,12 @@ impl Studio {
             })
             .collect();
         let text = format!(
-            "{:.1} × {:.1} mm, {} stitches, {} colors. Sewing order: {}.",
+            "{:.1} Ã— {:.1} mm, {} stitches, {} colors. Sewing order: {}.",
             b.width() / 10.0,
             b.height() / 10.0,
             self.design.stitch_count(),
             self.design.blocks.len(),
-            legend.join(" → ")
+            legend.join(" â†’ ")
         );
         Ok(ToolResult {
             content: vec![Content::Image(png), Content::Text(text)],
@@ -1885,6 +1883,137 @@ mod tests {
     use super::*;
     use crate::app::Studio;
     use std::io::{Read, Write};
+
+    #[test]
+    fn input_validation_rejects_wrong_types_before_dispatch() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        for (tool, args) in [
+            ("add_text", json!({"text": "ZigZag", "size_mm": "large"})),
+            ("add_text", json!({"text": "ZigZag", "bold": "yes"})),
+            ("render_preview", json!({"width_px": 900.5})),
+            ("trace_image", json!({"path": "/logo.png", "colors": 3.5})),
+            ("set_document", json!({"remove_overlaps": 1})),
+            ("switch_document", json!({"index": -1})),
+            (
+                "duplicate_objects",
+                json!({"objects": [0], "offset_mm": [1]}),
+            ),
+            (
+                "batch",
+                json!({"steps": [{"tool": "get_design", "arguments": []}]}),
+            ),
+            ("add_text", json!({})),
+            ("add_text", json!({"text": "ZigZag", "align": "unknown"})),
+        ] {
+            let result = check_args(tool, &args);
+            ensure!(
+                result.is_err(),
+                "{tool} silently accepted invalid input: {args}"
+            );
+            if let Err(message) = result {
+                ensure!(
+                    message.contains(tool) && message.contains("arguments"),
+                    "missing diagnostic location: {message}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn input_validation_preserves_resets_defaults_and_clamping() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        check_args("get_design", &Value::Null).map_err(anyhow::Error::msg)?;
+        check_args("add_text", &json!({"text": "ZigZag"})).map_err(anyhow::Error::msg)?;
+        let mut s = Studio::with_file(None, None);
+        let invalid = s.run_tool("add_text", &json!({"text": "ZigZag", "size_mm": "large"}));
+        ensure!(
+            invalid.is_error && s.doc.shapes.is_empty(),
+            "invalid text reached editing"
+        );
+        ensure!(
+            !s.run_tool("add_svg", &json!({"svg": BADGE})).is_error,
+            "fixture failed"
+        );
+        let edit = s.run_tool("set_object", &json!({"object": 0, "spacing_mm": 100}));
+        ensure!(!edit.is_error, "clamping rejected: {}", text(&edit));
+        ensure!(
+            s.doc.shapes.first().context("shape")?.params.spacing == Some(2.0),
+            "clamping changed"
+        );
+        ensure!(
+            !s.run_tool("set_object", &json!({"object": 0})).is_error,
+            "omission rejected"
+        );
+        ensure!(
+            s.doc.shapes.first().context("shape")?.params.spacing == Some(2.0),
+            "omission reset field"
+        );
+        let reset = s.run_tool("set_object", &json!({"object": 0, "spacing_mm": null, "satin_underlay": null, "underlay": null, "color": null}));
+        ensure!(!reset.is_error, "null reset rejected: {}", text(&reset));
+        ensure!(
+            s.doc
+                .shapes
+                .first()
+                .context("shape")?
+                .params
+                .spacing
+                .is_none(),
+            "reset lost"
+        );
+        for (tool, args) in [
+            (
+                "transform_objects",
+                json!({"objects": 0, "move_to_mm": null, "move_by_mm": null}),
+            ),
+            (
+                "duplicate_objects",
+                json!({"objects": 0, "offset_mm": null}),
+            ),
+            ("simplify", json!({"objects": [0], "level": null})),
+            ("select", json!({"object": null})),
+        ] {
+            let result = s.run_tool(tool, &args);
+            ensure!(
+                !result.is_error,
+                "documented default/reset rejected: {tool}: {}",
+                text(&result)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn input_validation_checks_batch_arguments_after_reference_resolution() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        let valid = s.run_tool("batch", &json!({"steps": [
+            {"tool": "add_svg", "arguments": {"svg": BADGE}},
+            {"tool": "set_object", "arguments": {"object": "$0.added.0.index", "spacing_mm": 0.4}}
+        ]}));
+        ensure!(
+            !valid.is_error,
+            "numeric reference rejected: {}",
+            text(&valid)
+        );
+        let before = s.doc.to_svg()?;
+        let invalid = s.run_tool(
+            "batch",
+            &json!({"steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}},
+                {"tool": "set_object", "arguments": {"object": 0, "spacing_mm": "$0.added.0.name"}}
+            ]}),
+        );
+        ensure!(
+            invalid.is_error && text(&invalid).contains("spacing_mm"),
+            "resolved string accepted as number"
+        );
+        ensure!(
+            s.doc.to_svg()? == before,
+            "invalid resolved batch not rolled back"
+        );
+        Ok(())
+    }
 
     const BADGE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
         <circle id="patch" cx="50" cy="50" r="48" fill="#1d3557"/>
