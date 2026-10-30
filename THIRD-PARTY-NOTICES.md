@@ -4437,7 +4437,7 @@ terms compatible with the above MIT license:
 * musl libc https://www.musl-libc.org/. This library contains the following
   copyright:
 
-      Copyright © 2005-2020 Rich Felker, et al.
+      Copyright Â© 2005-2020 Rich Felker, et al.
 
 * The CORE-MATH project https://core-math.gitlabpages.inria.fr/. CORE-MATH
   routines are available under the MIT license on a per-file basis.
@@ -4447,12 +4447,12 @@ math portions of the library:
 
 ------------------------------------------------------------------------------
 Much of the math library code (src/math/* and src/complex/*) is
-Copyright © 1993,2004 Sun Microsystems or
-Copyright © 2003-2011 David Schultz or
-Copyright © 2003-2009 Steven G. Kargl or
-Copyright © 2003-2009 Bruce D. Evans or
-Copyright © 2008 Stephen L. Moshier or
-Copyright © 2017-2018 Arm Limited
+Copyright Â© 1993,2004 Sun Microsystems or
+Copyright Â© 2003-2011 David Schultz or
+Copyright Â© 2003-2009 Steven G. Kargl or
+Copyright Â© 2003-2009 Bruce D. Evans or
+Copyright Â© 2008 Stephen L. Moshier or
+Copyright Â© 2017-2018 Arm Limited
 and labelled as such in comments in the individual source files. All
 have been licensed under extremely permissive terms.
 ------------------------------------------------------------------------------
@@ -5013,7 +5013,7 @@ terms compatible with the above MIT license:
 * musl libc https://www.musl-libc.org/. This library contains the following
   copyright:
 
-      Copyright © 2005-2020 Rich Felker, et al.
+      Copyright Â© 2005-2020 Rich Felker, et al.
 
 * The CORE-MATH project https://core-math.gitlabpages.inria.fr/. CORE-MATH
   routines are available under the MIT license on a per-file basis.
@@ -5023,12 +5023,12 @@ math portions of the library:
 
 ------------------------------------------------------------------------------
 Much of the math library code (src/math/* and src/complex/*) is
-Copyright © 1993,2004 Sun Microsystems or
-Copyright © 2003-2011 David Schultz or
-Copyright © 2003-2009 Steven G. Kargl or
-Copyright © 2003-2009 Bruce D. Evans or
-Copyright © 2008 Stephen L. Moshier or
-Copyright © 2017-2018 Arm Limited
+Copyright Â© 1993,2004 Sun Microsystems or
+Copyright Â© 2003-2011 David Schultz or
+Copyright Â© 2003-2009 Steven G. Kargl or
+Copyright Â© 2003-2009 Bruce D. Evans or
+Copyright Â© 2008 Stephen L. Moshier or
+Copyright Â© 2017-2018 Arm Limited
 and labelled as such in comments in the individual source files. All
 have been licensed under extremely permissive terms.
 ------------------------------------------------------------------------------
