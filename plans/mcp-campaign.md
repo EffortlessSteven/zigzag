@@ -120,3 +120,39 @@ Preserve useful authorized tracing/export workflows when designing embedded
 authority; nested dispatch must inherit grants. Client flags alone are not a
 server authorization boundary. Authentication and document targeting need
 explicit workflow decisions. Queued timeout/cancellation is a separate candidate.
+
+## Persistence review follow-up (fork only)
+
+Repair two distinct outcomes in the shared replacement seam. First reproduce a
+read-only destination replacement as an unprivileged Linux user; require the
+same effective write-access decision as an ordinary non-truncating write open.
+Do not infer access from mode bits (privileged users and ACLs differ).
+
+Represent a directory-sync failure after replacement as a typed committed
+outcome. Document normalization and Save As identity must then reflect the
+visible replacement, while Studio reports uncertainty, returns an error to MCP,
+and retains recovery until a successful retry. Pre-replacement errors preserve
+both disk bytes and live document state. Tests inject sync failure without
+claiming power-loss durability. No changes to serialization or format writers.
+
+Proof: native Linux replacement tests; Windows document, save, export and session
+regressions. macOS, unusual filesystems and physical crash testing remain outside
+this candidate's qualification. The write-access probe is not an authorization
+lease across concurrent filesystem changes.
+
+Persistence review results: the unprivileged Ubuntu/WSL regression failed before
+the write-access probe (ordinary write denied, replacement succeeded). With the
+probe, native Linux library tests PASS: 142 passed, 1 ignored, Rust 1.98.1.
+This executes Unix mode and symlink tests on native temporary files, not merely
+cross-compilation. Windows library tests PASS: 142 passed, 1 ignored, Rust 1.98.0.
+The committed-identity test also fails under a deliberate wrong implementation
+that discards prepared state on every error (`committed Save As identity lost`).
+The actual implementation restores the typed committed outcome; the Studio
+warning/recovery/retry test passes. No macOS or power-loss qualification is claimed.
+
+Windows focused Studio save tests PASS (3); PES/HTML export regression PASS (1).
+Session suite FAIL: 8 passed, 1 failed (`the_design_on_the_machine_comes_back`,
+restore_sent assertion). Exact isolated retry PASS. This repeats the unresolved
+session/simulator intermittency tracked in fork issue #9; do not classify the
+suite as green or claim a proven root cause. Raw current-run logs are retained
+under .git/qualification/persistence-*.log (local evidence, not upstream files).

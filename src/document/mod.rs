@@ -338,15 +338,22 @@ impl Document {
         };
         let mut prepared = self.clone();
         prepared.sync()?;
-        replace(&path, prepared.xml.as_bytes()).with_context(|| format!("writing {}", path.display()))?;
-        if prepared.path.as_deref() != Some(path.as_path()) {
+        let result = replace(&path, prepared.xml.as_bytes());
+        let committed = result
+            .as_ref()
+            .err()
+            .is_none_or(crate::file_replace::replacement_committed);
+        if committed && prepared.path.as_deref() != Some(path.as_path()) {
             prepared.name = path
                 .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
             prepared.path = Some(path.clone());
         }
-        *self = prepared;
+        if committed {
+            *self = prepared;
+        }
+        result.with_context(|| format!("writing {}", path.display()))?;
         Ok(path)
     }
 
@@ -779,6 +786,44 @@ use crate::geom::{affine_inv as mat_inv, affine_mul as mat_mul};
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn committed_save_keeps_identity_when_directory_sync_fails() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        use std::io::{self, Write};
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("committed.svg");
+        let mut document = super::Document::empty();
+        document.settings.fabric = "thin-cap".into();
+        let result = document.save_with(Some(&path), |path, bytes| {
+            crate::file_replace::replace_file_atomic(path, |file| file.write_all(bytes))?;
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                crate::file_replace::DurabilityError {
+                    destination: path.to_path_buf(),
+                    source: io::Error::other("injected directory sync failure"),
+                },
+            ))
+        });
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("sync failure swallowed"))?;
+        ensure!(
+            error
+                .downcast_ref::<io::Error>()
+                .is_some_and(crate::file_replace::replacement_committed),
+            "commit marker lost"
+        );
+        ensure!(
+            document.path.as_ref() == Some(&path) && document.name == "committed",
+            "committed Save As identity lost"
+        );
+        ensure!(
+            std::fs::read_to_string(&path)? == document.xml,
+            "live normalization differs from committed bytes"
+        );
+        Ok(())
+    }
+
     #[test]
     fn atomic_save_preserves_original_and_identity_on_failure() -> anyhow::Result<()> {
         use anyhow::ensure;
