@@ -25,6 +25,7 @@ impl ToolEffects {
     const FILE_READ: u16 = 16;
     const FILE_WRITE: u16 = 32;
     const DEVICE: u16 = 64;
+    // Traversal/replacement of history; ordinary reversible edits record Undo.
     const HISTORY: u16 = 128;
     const DYNAMIC: u16 = 256;
 
@@ -61,7 +62,12 @@ fn tool_policy(name: &str) -> Option<ToolPolicy> {
         effects: ToolEffects(effects),
         reads_plan: matches!(
             name,
-            "get_design" | "render_preview" | "check_design" | "export" | "send_to_skitch"
+            "get_design"
+                | "render_preview"
+                | "check_design"
+                | "group_colors"
+                | "export"
+                | "send_to_skitch"
         ),
         destructive: matches!(
             name,
@@ -90,12 +96,12 @@ struct DocumentTransaction {
 }
 
 impl DocumentTransaction {
-    fn capture(s: &Studio) -> Self {
+    fn capture(s: &mut Studio) -> Self {
         Self {
             doc: s.doc.clone(),
             stable: s.stable.clone(),
-            undo: s.undo.clone(),
-            redo: s.redo.clone(),
+            undo: std::mem::take(&mut s.undo),
+            redo: std::mem::take(&mut s.redo),
             selected: s.selected,
             hovered: s.hovered,
             layout: s.layout.clone(),
@@ -133,6 +139,23 @@ impl DocumentTransaction {
         s.player = self.player;
         s.playing = self.playing;
         s.player_acc = self.player_acc;
+    }
+
+    fn commit(self, s: &mut Studio, edited: bool) {
+        let changed = edited
+            || s.doc.rev() != self.doc.rev()
+            || crate::app::snapshot_of(&s.doc) != crate::app::snapshot_of(&self.doc);
+        s.undo = self.undo;
+        s.redo = self.redo;
+        if changed {
+            // The first step may not have recorded its own history. Undo must
+            // still restore the live document from before the entire batch.
+            s.push_undo(self.doc);
+            s.redo.clear();
+            s.stable = s.doc.clone();
+            s.modified = true;
+            s.dirty = true;
+        }
     }
 }
 
@@ -667,6 +690,17 @@ fn check_args(name: &str, args: &Value) -> Result<(), String> {
     ))
 }
 
+fn has_result_reference(value: &Value) -> bool {
+    match value {
+        Value::String(text) => text.strip_prefix('$').is_some_and(|body| {
+            body.split('.').next().is_some_and(|step| step.parse::<usize>().is_ok())
+        }),
+        Value::Array(values) => values.iter().any(has_result_reference),
+        Value::Object(values) => values.values().any(has_result_reference),
+        _ => false,
+    }
+}
+
 /// Replace "$N.path" strings in `v` by that field of step N's result.
 fn resolve_refs(v: &Value, results: &[Value]) -> Result<Value, String> {
     Ok(match v {
@@ -1096,7 +1130,14 @@ impl Studio {
                 Ok(ToolResult::json(&self.documents_json()))
             }
             "group_colors" => {
+                let before = self.doc.clone();
                 self.group_colors();
+                if crate::app::snapshot_of(&self.doc) != crate::app::snapshot_of(&before) {
+                    self.push_undo(before);
+                    self.redo.clear();
+                    self.stable = self.doc.clone();
+                    self.modified = true;
+                }
                 Ok(ToolResult::text(format!(
                     "{} Sewing order: {}",
                     self.status,
@@ -1224,8 +1265,23 @@ impl Studio {
         let atomic = args.get("atomic").and_then(Value::as_bool).unwrap_or(true);
         // Reject every scope escape before step zero, including unknown names.
         let rejected: Vec<String> = steps.iter().enumerate().filter_map(|(k, step)| {
+            if !atomic {
+                return None;
+            }
             let name = step.get("tool").and_then(Value::as_str).unwrap_or("");
-            (atomic && !tool_policy(name).is_some_and(|p| p.effects.atomic())).then(|| format!("step {k} (`{name}`)"))
+            if !tool_policy(name).is_some_and(|p| p.effects.atomic()) {
+                return Some(format!("step {k} (`{name}`)"));
+            }
+            let empty = json!({});
+            let raw = step.get("arguments").unwrap_or(&empty);
+            // Values depending on previous results are validated at dispatch,
+            // after resolution. All statically known arguments are checked now.
+            if !has_result_reference(raw) {
+                if let Err(error) = resolve_refs(raw, &[]).and_then(|args| check_args(name, &args)) {
+                    return Some(format!("step {k} (`{name}`): {error}"));
+                }
+            }
+            None
         }).collect();
         if !rejected.is_empty() {
             let msg = format!("Batch preflight rejected {}. No steps ran.", rejected.join(", "));
@@ -1234,8 +1290,8 @@ impl Studio {
             result.is_error = true;
             return result;
         }
-        let undo0 = self.undo.len();
         let snapshot = atomic.then(|| DocumentTransaction::capture(self));
+        let mut edited = false;
         let mut results: Vec<Value> = Vec::new();
         let mut report = Vec::new();
         let mut images = Vec::new();
@@ -1267,6 +1323,12 @@ impl Studio {
                 r.is_error = true;
                 return r;
             }
+            if atomic {
+                edited |= !self.undo.is_empty();
+                // No original history is in this scratch vector. Keep at most
+                // one step's temporary snapshots, not the whole batch's history.
+                self.undo.clear();
+            }
             let text = text_of(&r);
             let value = serde_json::from_str(&text).unwrap_or(Value::String(text));
             images.extend(
@@ -1277,9 +1339,8 @@ impl Studio {
             report.push(json!({ "step": k, "tool": tool, "result": value.clone() }));
             results.push(value);
         }
-        // One undo step for the lot.
-        if atomic && self.undo.len() > undo0 + 1 {
-            self.undo.truncate(undo0 + 1);
+        if let Some(snapshot) = snapshot {
+            snapshot.commit(self, edited);
         }
         if let Some(label) = args.get("label").and_then(Value::as_str) {
             self.status = label.to_string();
@@ -2014,9 +2075,166 @@ mod tests {
     use crate::app::Studio;
     use std::io::{Read, Write};
 
+    #[test]
+    fn successful_color_grouping_is_modified_and_undoes_the_entire_batch() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="10mm" viewBox="0 0 60 10"><rect id="a" x="0" y="0" width="5" height="5" fill="red"/><rect id="b" x="20" y="0" width="5" height="5" fill="blue"/><rect id="c" x="40" y="0" width="5" height="5" fill="red"/></svg>"#;
+        for mode in [
+            "direct",
+            "atomic",
+            "atomic_with_later_edit",
+            "atomic_created",
+        ] {
+            let mut s = Studio::with_file(None, None);
+            if mode != "atomic_created" {
+                s.set_document(Document::from_svg(svg, "colors", None)?);
+            }
+            s.replan();
+            let before: Vec<_> = s.doc.shapes.iter().map(|shape| shape.uid).collect();
+            let result = if mode == "direct" {
+                s.run_tool("group_colors", &json!({}))
+            } else {
+                let mut steps = Vec::new();
+                if mode == "atomic_created" {
+                    steps.push(json!({"tool": "add_svg", "arguments": {"svg": svg}}));
+                }
+                steps.push(json!({"tool": "group_colors"}));
+                if mode == "atomic_with_later_edit" {
+                    steps.push(json!({"tool": "set_object", "arguments": {"object": 0, "spacing_mm": 0.6}}));
+                }
+                s.run_tool("batch", &json!({"steps": steps}))
+            };
+            ensure!(!result.is_error, "{mode}: {}", text(&result));
+            ensure!(
+                text(&result).contains("Color changes"),
+                "grouping used a stale plan: {}",
+                text(&result)
+            );
+            let grouped: Vec<_> = s.doc.shapes.iter().map(|shape| shape.uid).collect();
+            ensure!(grouped != before, "fixture did not reorder");
+            ensure!(
+                s.modified && s.undo.len() == 1,
+                "{mode}: successful grouping lost modified/Undo state"
+            );
+            ensure!(s.apply_history(crate::app::History::Undo), "missing Undo");
+            ensure!(
+                s.doc
+                    .shapes
+                    .iter()
+                    .map(|shape| shape.uid)
+                    .collect::<Vec<_>>()
+                    == before,
+                "{mode}: Undo retained the first step"
+            );
+            ensure!(s.apply_history(crate::app::History::Redo), "missing Redo");
+            ensure!(
+                s.doc
+                    .shapes
+                    .iter()
+                    .map(|shape| shape.uid)
+                    .collect::<Vec<_>>()
+                    == grouped,
+                "{mode}: Redo lost the batch"
+            );
+        }
+        Ok(())
+    }
 
+    #[test]
+    fn atomic_snapshot_moves_history_allocations_instead_of_cloning_them() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        s.undo = (0..crate::app::UNDO_STEPS)
+            .map(|_| Document::empty())
+            .collect();
+        s.redo.push(Document::empty());
+        let undo = s.undo.as_ptr();
+        let redo = s.redo.as_ptr();
+        let snapshot = DocumentTransaction::capture(&mut s);
+        ensure!(
+            snapshot.undo.as_ptr() == undo && snapshot.redo.as_ptr() == redo,
+            "snapshot cloned historical documents"
+        );
+        snapshot.restore(&mut s);
+        ensure!(
+            s.undo.as_ptr() == undo && s.redo.as_ptr() == redo,
+            "rollback changed history allocations"
+        );
+        let readonly = s.run_tool("batch", &json!({"steps": [{"tool": "get_svg"}]}));
+        ensure!(!readonly.is_error, "readonly batch failed");
+        ensure!(
+            s.undo.as_ptr() == undo && s.redo.as_ptr() == redo,
+            "readonly batch changed history buffers"
+        );
+        Ok(())
+    }
 
+    #[test]
+    fn atomic_batch_keeps_the_history_limit_and_one_complete_undo() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let mut s = Studio::with_file(None, None);
+        s.doc.name = "live-before".into();
+        for i in 0..crate::app::UNDO_STEPS {
+            let mut document = Document::empty();
+            document.name = format!("history-{i}");
+            s.undo.push(document);
+        }
+        s.redo.push(Document::empty());
+        let result = s.run_tool(
+            "batch",
+            &json!({"steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}},
+                {"tool": "set_object", "arguments": {"object": 0, "spacing_mm": 0.6}}
+            ]}),
+        );
+        ensure!(!result.is_error, "batch failed: {}", text(&result));
+        ensure!(
+            s.undo.len() == crate::app::UNDO_STEPS && s.redo.is_empty(),
+            "incorrect history limit/Redo"
+        );
+        ensure!(
+            s.undo.first().context("old history")?.name == "history-1",
+            "wrong historical entry trimmed"
+        );
+        ensure!(
+            s.undo.last().context("batch history")?.name == "live-before",
+            "batch did not retain its original document"
+        );
+        ensure!(
+            s.apply_history(crate::app::History::Undo),
+            "missing batch Undo"
+        );
+        ensure!(
+            s.doc.shapes.is_empty() && s.doc.name == "live-before",
+            "Undo stopped inside the batch"
+        );
+        Ok(())
+    }
 
+    #[test]
+    fn atomic_batch_rejects_static_argument_errors_before_step_zero() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        s.replan();
+        let plans = s.replans;
+        let result = s.run_tool(
+            "batch",
+            &json!({"steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}},
+                {"tool": "set_object", "arguments": {"object": 0, "widht_mm": 2}}
+            ]}),
+        );
+        ensure!(result.is_error, "invalid static argument accepted");
+        ensure!(
+            s.replans == plans,
+            "earlier steps ran and triggered rollback planning"
+        );
+        ensure!(
+            s.doc.shapes.is_empty() && s.undo.is_empty(),
+            "preflight changed document/history"
+        );
+        Ok(())
+    }
 
     fn tab_state(s: &Studio) -> Value {
         json!({
@@ -2125,7 +2343,14 @@ mod tests {
             ),
             ("add_svg", json!({"svg": BADGE})),
         ] {
-            let snapshot = DocumentTransaction::capture(&s);
+            let before_selected = s.selected;
+            let before_layout = s.layout.clone();
+            let before_view = s.view;
+            let before_fit = s.fit_pending;
+            let before_stable = s.stable.xml.clone();
+            let before_undo = s.undo.iter().map(Document::to_svg).collect::<anyhow::Result<Vec<_>>>()?;
+            let before_redo = s.redo.iter().map(Document::to_svg).collect::<anyhow::Result<Vec<_>>>()?;
+            let before_player = (s.player, s.playing, s.player_acc);
             let before = tab_state(&s);
             let result = s.run_tool(
                 "batch",
@@ -2142,31 +2367,29 @@ mod tests {
             );
             ensure!(tab_state(&s) == before, "document or tabs changed");
             ensure!(
-                s.selected == snapshot.selected && s.layout.multi == snapshot.layout.multi,
+                s.selected == before_selected && s.layout.multi == before_layout.multi,
                 "selection leaked"
             );
             ensure!(
-                s.layout.isolated == snapshot.layout.isolated,
+                s.layout.isolated == before_layout.isolated,
                 "isolation leaked"
             );
             ensure!(
-                s.view.center == snapshot.view.center
-                    && s.view.scale == snapshot.view.scale
-                    && s.fit_pending == snapshot.fit_pending,
+                s.view.center == before_view.center
+                    && s.view.scale == before_view.scale
+                    && s.fit_pending == before_fit,
                 "view leaked"
             );
             ensure!(
-                s.stable.xml == snapshot.stable.xml,
+                s.stable.xml == before_stable,
                 "stable reconstructed incorrectly"
             );
             ensure!(
-                s.undo.len() == snapshot.undo.len() && s.redo.len() == snapshot.redo.len(),
+                s.undo.iter().map(Document::to_svg).collect::<anyhow::Result<Vec<_>>>()? == before_undo && s.redo.iter().map(Document::to_svg).collect::<anyhow::Result<Vec<_>>>()? == before_redo,
                 "history leaked"
             );
             ensure!(
-                s.player == snapshot.player
-                    && s.playing == snapshot.playing
-                    && s.player_acc == snapshot.player_acc,
+                (s.player, s.playing, s.player_acc) == before_player,
                 "player changed"
             );
             ensure!(s.status.contains("failed"), "failure hidden from UI");

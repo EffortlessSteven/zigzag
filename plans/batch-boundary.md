@@ -37,3 +37,31 @@ nested batches, stable versus live snapshot, and cache revision reuse after
 rollback. Preserved JSON error/result envelope for preflight failures. Independent
 review remains pending. Full GUI, Mac and hardware tests are NOT RUN; the base
 has a separately reproduced decorative-fill GUI failure. No upstream action.
+
+## Successful transaction and history ownership review
+
+Review identified two additional obligations: grouping colors must mark an edit
+and preserve the pre-batch order in Undo, including when it precedes another
+edit; capture must not clone up to 200 historical documents per batch.
+
+Reproduce grouping directly and in successful batches, then check Undo/Redo.
+Use allocation identity to distinguish cloned versus moved history buffers.
+Move original history into the transaction, give steps scratch history, discard
+intermediate step snapshots after each success, and restore original history
+on rollback. On commit, append the transaction's original live document as the
+single Undo entry. Keep readonly batches' history unchanged. No caller-authority
+or native editing-engine redesign is needed for this correction.
+
+Review witnesses: grouping lost modified/Undo state, and history allocation
+identity showed cloning, before the corrections. Both now pass. Successful
+grouping, grouping followed by another edit, create/group, Undo/Redo, history
+limit trimming, readonly history preservation, and rollback are covered.
+Snapshotting moves the existing history buffers; it has no history-length
+document-copy cost. Each completed step's temporary history is dropped.
+
+Static argument errors are now preflighted before step zero (a regression
+previously observed rollback planning, proving earlier work ran). Arguments
+depending on earlier results remain validated after reference resolution at
+dispatch; failures still roll back the document. This composes with the separate
+schema candidate without coupling this PR to that dependency. MCP tools: 19
+PASS on Windows, locked dependencies. Independent review remains pending.
