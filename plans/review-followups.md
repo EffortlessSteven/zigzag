@@ -1,6 +1,7 @@
 # Current fork review work
 
-Fork only. No upstream submission or release is authorized. The combined
+The qualified candidates are [submitted upstream](upstream-submission.md) with
+Steven’s authorization. No merge or release is authorized. The combined
 candidate is `review/fork-candidate`; [qualification](fork-candidate-qualification.md)
 records exact heads, commands, results and applicability.
 
@@ -23,7 +24,7 @@ The final P3 findings in #3 and #13 are repaired, tested and independently
 reviewed. Counterexamples and delivery proof are in
 [final corrections](final-corrections.md).
 
-- Steven’s contribution selection remains. Separate agent reviews of current
+- Await upstream review of the submitted contributions. Separate agent reviews of current
   #2 and the stacked #3/#5 source are complete; the one cleanup finding was
   reproduced, repaired and reviewed. No fork-main merge or upstream approval
   is implied.

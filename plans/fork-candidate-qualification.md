@@ -3,8 +3,8 @@
 Scope: EffortlessSteven/zigzag only. Baseline `81825c4812a6b9df45880da3a97fc7f63ad4e51b`.
 Tested combined code/fixture head: `74058d8edf50d3fd8f60663f6a006fa3b320bfb7`. Later changes are documentation
 only; `src`, `tests`, Cargo.toml and Cargo.lock are unchanged from that head.
-No upstream submission, fork-main merge, release or hardware qualification is
-claimed. These are open candidates, not a required count of contributions.
+Upstream submission is recorded [separately](upstream-submission.md). No
+fork-main merge, release or hardware qualification is claimed. These are open candidates, not a required count of contributions.
 
 | Fork PR | Branch | Head |
 | --- | --- | --- |

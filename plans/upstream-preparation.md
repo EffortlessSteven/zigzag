@@ -1,6 +1,7 @@
 # Clean contribution preparation
 
-Fork only. Nothing has been submitted upstream. Existing working topics and PRs
+The clean candidates have now been [submitted upstream](upstream-submission.md)
+with Steven’s authorization. Existing working topics and PRs
 retain their review history. Separate clean branches contain the contribution
 without fork plans or campaign history. The baseline is
 81825c4812a6b9df45880da3a97fc7f63ad4e51b.
@@ -79,7 +80,7 @@ Clean #13 558bf9e includes the completion witness; positive agent tests pass and
 both false-success controls fail. See [final corrections](final-corrections.md).
 Product trees match their source topics outside plans/. No history was rewritten.
 Use #16 for the schema contribution once; standalone #5 remains a fallback.
-Nothing has been submitted upstream.
+Submission URLs and exact heads are in [the submission record](upstream-submission.md).
 
 ## Persistence cost and simplicity review
 
