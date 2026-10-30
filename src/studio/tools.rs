@@ -48,9 +48,9 @@ fn tool_policy(name: &str) -> Option<ToolPolicy> {
         | "transform_objects" | "duplicate_objects" | "add_text" | "edit_text" | "group_colors"
         | "select" | "round_corners" | "simplify" | "clean_up" => E::EDIT | E::UI,
         "trace_image" => E::FILE_READ | E::EDIT | E::UI,
-        "open_file" => E::FILE_READ | E::TABS | E::UI,
-        "switch_document" | "new_document" => E::TABS | E::UI,
-        "save" => E::FILE_WRITE,
+        "open_file" => E::FILE_READ | E::TABS | E::EDIT | E::UI | E::HISTORY,
+        "switch_document" | "new_document" => E::TABS | E::UI | E::HISTORY,
+        "save" => E::FILE_WRITE | E::EDIT | E::UI,
         "export" => E::READ | E::FILE_WRITE,
         "send_to_skitch" => E::READ | E::DEVICE,
         "undo" => E::HISTORY | E::EDIT | E::UI,
@@ -115,7 +115,7 @@ impl DocumentTransaction {
         s.stable = self.stable;
         s.undo = self.undo;
         s.redo = self.redo;
-        // Rollback can reuse revision numbers: discard caches from failed edits.
+        // The restored document must not see caches from failed edits.
         s.plan_cache = Default::default();
         *s.stitch_mesh.borrow_mut() = None;
         *s.preview_mesh.borrow_mut() = None;
@@ -138,11 +138,11 @@ impl DocumentTransaction {
 
 pub const INSTRUCTIONS: &str = "ZigZag is a machine-embroidery editor showing live documents on a hoop, one per tab; the tools work on the one in front (list_documents, switch_document, new_document). \
 Coordinates are millimetres from the hoop center (+x right, +y down). The person watching sees every change, and each tool call is one undo step. \
-Typical flow: get_design â†’ add_svg (any SVG artwork) and add_text (lettering) â†’ transform_objects to size and place â†’ set_object to choose stitch types â†’ render_preview to look at the stitches â†’ check_design â†’ save, or export (machine file or html worksheet). \
-Stitch types: fill (tatami rows; areas wider than ~7 mm), satin (glossy zigzag columns 1â€“7 mm wide; works on strokes, and on narrow filled shapes like letters, bars and rings), run (thin running stitch for details), \
+Typical flow: get_design → add_svg (any SVG artwork) and add_text (lettering) → transform_objects to size and place → set_object to choose stitch types → render_preview to look at the stitches → check_design → save, or export (machine file or html worksheet). \
+Stitch types: fill (tatami rows; areas wider than ~7 mm), satin (glossy zigzag columns 1–7 mm wide; works on strokes, and on narrow filled shapes like letters, bars and rings), run (thin running stitch for details), \
 contour (rows following the outline inward), blanket (E-stitch edge), applique (placement line, stop, tack-down, stop, satin cover) and manual (every path point is a needle point). \
 Settings can also be preset in SVG element ids, e.g. id=\"logo_fill_a=45\" or id=\"border_satin_w=2\". \
-Hat designs are small (about 50 Ã— 50 mm on the front of a cap): keep satin columns under 7 mm wide, letters at least 5 mm tall, and details at least 1.5 mm. \
+Hat designs are small (about 50 × 50 mm on the front of a cap): keep satin columns under 7 mm wide, letters at least 5 mm tall, and details at least 1.5 mm. \
 open_file also opens machine files (pes, dst, exp, jef) as manual stitches. \
 trace_image turns a PNG/JPEG logo into shapes (snap colors to Brother or Janome threads with `threads`). round_corners softens sharp corners, which stitch more cleanly; simplify takes extra points out of outlines (traced ones especially) and clean_up removes stray points, objects too small to sew and extra points across the design. \
 Use batch to make several changes in one call: it is all or nothing and one undo step, and later steps can use earlier results (\"$0.added.0.name\").";
@@ -168,7 +168,7 @@ fn text_props(new: bool) -> Value {
         "v_scale": { "type": "number", "description": "Vertical scale, percent. Default 100." },
         "case": { "type": "string", "enum": ["as", "upper", "lower", "title"], "description": "Letter case applied to the text. Default as typed." },
         "on_path": { "description": "Put the text on an existing path object's outline (the object is then not sewn); null takes it off.", "oneOf": [{ "type": "integer" }, { "type": "string" }, { "type": "null" }] },
-        "path_offset": { "type": "number", "description": "On a path: where the text starts, 0â€“1 along it." },
+        "path_offset": { "type": "number", "description": "On a path: where the text starts, 0–1 along it." },
         "path_flip": { "type": "boolean", "description": "On a path: letters on the other side." },
         "kern": { "type": "array", "description": "Pair kerning: for each, the 0-based character index and how far (mm) to move it and the rest of the line; replaces any kerning set before.", "items": { "type": "object", "properties": { "at": { "type": "integer" }, "mm": { "type": "number" } }, "required": ["at", "mm"] } }
     });
@@ -291,7 +291,7 @@ pub fn tool_specs() -> Value {
         }),
         json!({
             "name": "add_svg",
-            "description": "Add SVG artwork to the canvas (or replace the document). Every filled shape and stroke becomes an object; fills default to fill stitch, strokes to satin (â‰¥1 mm) or run. Settings in element ids apply (e.g. id=\"leaf_satin\"). By default the artwork keeps its own size (viewBox units scaled by width/height attributes, else 1 unit = 1 px) and is centered on the hoop.",
+            "description": "Add SVG artwork to the canvas (or replace the document). Every filled shape and stroke becomes an object; fills default to fill stitch, strokes to satin (≥1 mm) or run. Settings in element ids apply (e.g. id=\"leaf_satin\"). By default the artwork keeps its own size (viewBox units scaled by width/height attributes, else 1 unit = 1 px) and is centered on the hoop.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -317,7 +317,7 @@ pub fn tool_specs() -> Value {
                     "spacing_mm": { "type": ["number", "null"], "description": "Fill/contour row spacing, satin zigzag spacing, or blanket prong spacing." },
                     "length_mm": { "type": ["number", "null"], "description": "Max stitch length for fill and run." },
                     "pull_mm": { "type": ["number", "null"], "description": "Pull compensation per side." },
-                    "width_mm": { "type": ["number", "null"], "description": "Satin width (strokes and borders), appliquÃ© cover width, or blanket prong length." },
+                    "width_mm": { "type": ["number", "null"], "description": "Satin width (strokes and borders), appliqué cover width, or blanket prong length." },
                     "split_mm": { "type": ["number", "null"], "description": "Satin auto-split: split stitches longer than this (0 = off; default 7)." },
                     "border": { "type": ["boolean", "null"], "description": "Satin on a filled shape: true = along its outline, false = across it as a column." },
                     "spiral": { "type": ["boolean", "null"], "description": "Contour fill as one spiral out from the center (or the start point) instead of rings." },
@@ -326,10 +326,10 @@ pub fn tool_specs() -> Value {
                     "short_stitches": { "type": ["boolean", "null"] },
                     "repeats": { "type": ["integer", "null"], "description": "Running stitch passes: 1 or 3 (bean)." },
                     "color": { "type": ["string", "null"], "description": "Thread color #rrggbb, or null for the SVG's color." },
-                    "start": { "type": ["number", "null"], "description": "Where sewing starts: 0â€“1 along the object's outline (fills: the outer ring from its first point; lines: from their start). Null: the planner chooses." },
-                    "end": { "type": ["number", "null"], "description": "Where sewing ends, 0â€“1 along the outline (the thread goes on from there to the next object)." },
+                    "start": { "type": ["number", "null"], "description": "Where sewing starts: 0–1 along the object's outline (fills: the outer ring from its first point; lines: from their start). Null: the planner chooses." },
+                    "end": { "type": ["number", "null"], "description": "Where sewing ends, 0–1 along the outline (the thread goes on from there to the next object)." },
                     "trim": { "type": ["boolean", "null"], "description": "Cut the thread after this object even if the next one is close." },
-                    "stop": { "type": ["boolean", "null"], "description": "Pause the machine after this object (to lay foam, or trim appliquÃ© fabric)." }
+                    "stop": { "type": ["boolean", "null"], "description": "Pause the machine after this object (to lay foam, or trim appliqué fabric)." }
                 },
                 "required": ["object"]
             }
@@ -449,7 +449,7 @@ pub fn tool_specs() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "width_px": { "type": "integer", "description": "Image width, 200â€“2000. Default 900." },
+                    "width_px": { "type": "integer", "description": "Image width, 200–2000. Default 900." },
                     "show_jumps": { "type": "boolean", "description": "Draw jump stitches. Default true." },
                     "fit": { "type": "string", "enum": ["design", "hoop"], "description": "Frame the design closely or show the whole hoop. Default design." }
                 }
@@ -495,7 +495,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Absolute path of the image." },
-                    "colors": { "type": "integer", "description": "Thread colors, 2â€“10. Default: found automatically." },
+                    "colors": { "type": "integer", "description": "Thread colors, 2–10. Default: found automatically." },
                     "width_mm": { "type": "number", "description": "Width of the traced artwork. Default: 80% of the hoop." },
                     "x_mm": { "type": "number", "description": "Center x (mm from hoop center). Default 0." },
                     "y_mm": { "type": "number", "description": "Center y. Default 0." },
@@ -503,7 +503,7 @@ pub fn tool_specs() -> Value {
                     "threads": { "type": "string", "enum": ["none", "brother", "janome"], "description": "Snap colors to this thread chart. Default none." },
                     "lines": { "type": "boolean", "description": "Trace thin lines as single lines (run/satin) instead of thin fills. Default false." },
                     "line_width_mm": { "type": "number", "description": "With lines: the widest line traced as a line. Default 1.5." },
-                    "detail": { "type": "number", "description": "0â€“100, how closely outlines follow the pixels. Default 60." },
+                    "detail": { "type": "number", "description": "0–100, how closely outlines follow the pixels. Default 60." },
                     "speckle_mm": { "type": "number", "description": "Drop areas smaller than this across. Default 1." },
                     "replace": { "type": "boolean", "description": "Start a new document with only the trace. Default false." }
                 },
@@ -530,7 +530,7 @@ pub fn tool_specs() -> Value {
                 "type": "object",
                 "properties": {
                     "objects": { "type": "array", "items": obj_schema(), "description": "Objects to simplify." },
-                    "level": { "type": "number", "description": "0â€“100: 0 for the fewest points, 100 to stay closest to the original (each 10 halves how far the outline may move; 50 is 1 pt). Default: Auto, the level for the objects' size." }
+                    "level": { "type": "number", "description": "0–100: 0 for the fewest points, 100 to stay closest to the original (each 10 halves how far the outline may move; 50 is 1 pt). Default: Auto, the level for the objects' size." }
                 },
                 "required": ["objects"]
             }
@@ -551,7 +551,7 @@ pub fn tool_specs() -> Value {
         }),
         json!({
             "name": "batch",
-            "description": "Run several tool calls in one go, in order. Atomic by default: if any step fails nothing changes, and the whole batch is one undo step. A string argument \"$N.field\" (e.g. \"$0.added.0.name\") is replaced by that field of step N's JSON result; write \"$$\" for a literal \"$\". Atomic batches stay in the current document: tabs, history, file writes, device actions and nested batches are rejected before any step runs. The stitches are planned once, at the end (and before any step that reads them: get_design, render_preview, check_design, export), so stitch counts in other steps' results are from before the batch.",
+            "description": "Run several tool calls in one go, in order. Atomic by default: a failed step rolls back document edits and interaction state; successful edits form one undo step. A string argument \"$N.field\" (e.g. \"$0.added.0.name\") is replaced by that field of step N's JSON result; write \"$$\" for a literal \"$\". Atomic batches stay in the current document: tabs, history, file writes, device actions and nested batches are rejected before any step runs. The stitches are planned once, at the end (and before any step that reads them: get_design, render_preview, check_design, export), so stitch counts in other steps' results are from before the batch.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -660,7 +660,7 @@ fn check_args(name: &str, args: &Value) -> Result<(), String> {
 /// Replace "$N.path" strings in `v` by that field of step N's result.
 fn resolve_refs(v: &Value, results: &[Value]) -> Result<Value, String> {
     Ok(match v {
-        // "$$â€¦" is a literal "$â€¦".
+        // "$$…" is a literal "$…".
         Value::String(s) if s.starts_with("$$") => Value::String(s[1..].to_string()),
         Value::String(s) if s.starts_with('$') => {
             let body = &s[1..];
@@ -987,7 +987,7 @@ impl Studio {
                 self.replan_soon();
                 Ok(ToolResult::text(format!(
                     "Sewing order: {}",
-                    self.names.join(" â†’ ")
+                    self.names.join(" → ")
                 )))
             }),
             "set_document" => self.tool_set_document(args),
@@ -1083,7 +1083,7 @@ impl Studio {
                 Ok(ToolResult::text(format!(
                     "{} Sewing order: {}",
                     self.status,
-                    self.names.join(" â†’ ")
+                    self.names.join(" → ")
                 )))
             }
             "list_fonts" => {
@@ -1229,7 +1229,7 @@ impl Studio {
             let failed = |msg: String| {
                 if atomic {
                     format!(
-                        "Step {k} ({tool}) failed: {msg} Nothing was changed: the batch is all or nothing."
+                        "Step {k} ({tool}) failed: {msg} Document edits and interaction state were rolled back."
                     )
                 } else {
                     format!("Step {k} ({tool}) failed: {msg} Steps before it were kept.")
@@ -1296,7 +1296,7 @@ impl Studio {
         };
         if let Some(n) = args.get("colors").and_then(Value::as_u64) {
             if !(2..=10).contains(&n) {
-                return Err("colors must be 2â€“10 (or leave it out to find them)".into());
+                return Err("colors must be 2–10 (or leave it out to find them)".into());
             }
             o.colors = n as u32;
         }
@@ -1894,12 +1894,12 @@ impl Studio {
             })
             .collect();
         let text = format!(
-            "{:.1} Ã— {:.1} mm, {} stitches, {} colors. Sewing order: {}.",
+            "{:.1} × {:.1} mm, {} stitches, {} colors. Sewing order: {}.",
             b.width() / 10.0,
             b.height() / 10.0,
             self.design.stitch_count(),
             self.design.blocks.len(),
-            legend.join(" â†’ ")
+            legend.join(" → ")
         );
         Ok(ToolResult {
             content: vec![Content::Image(png), Content::Text(text)],
