@@ -1,0 +1,64 @@
+# Tool input validation candidate
+
+Fork only. Base `81825c4`. Wrong types currently look like omitted arguments
+in several handlers. Compile and cache the existing advertised schemas, keeping
+semantic checks in handlers. Use jsonschema 0.60.2 with default features off:
+no HTTP/file resolver or TLS. GUI-only optional dependency; engine unchanged.
+It declares Rust 1.85 and MIT licensing. Cargo resolves 33 new locked packages:
+this is a dependency-cost tradeoff for standards-compliant validation rather
+than maintaining an incomplete schema implementation.
+
+Reconcile known schema/handler discrepancies explicitly: satin_underlay null
+already resets, and null coordinate pairs already mean omission. Preserve these
+in schemas. Root null remains empty arguments for backward compatibility, with
+required properties still enforced. Keep numeric clamping in handlers; do not
+add new range limits except nonnegative document indices. Reject wrong types,
+missing required fields, invalid enums, fractional integers and malformed pairs.
+
+Resolve batch references before validating each child tool's arguments. Validate
+only batch envelope and argument-object shape before reference resolution.
+Keep the existing top-level unknown-key check and its helpful wording.
+
+Proof: cheap invalid-argument table first, then preservation tests for omission,
+null resets, clamping and valid/invalid batch references; finally MCP tool tests.
+Rollback: revert candidate including manifest/lock/notices. No protocol migration,
+caller authority changes, domain-rule rewrite or upstream submission.
+
+Validation: unpatched `check_args` FAILS the new table by silently accepting
+`add_text.size_mm = "large"`. Candidate input tests: 3 PASS; MCP tools: 14 PASS.
+Tests exercise actual dispatch, omitted fields, clamped values, null resets,
+and references that resolve to valid indices or invalid numeric arguments.
+All schemas compile through the cached validator. A null simplify level is also
+preserved as automatic simplification, matching its existing explicit handler.
+
+License generation: installed cargo-about 0.6.4 cannot run the repo command.
+An isolated 0.9.3 tool under `.git/license-tools` generates the configured Mac
+dependency notices successfully after adding MIT-0 (borrow-or-share) to accepted
+licenses. Used the existing renderer, normalized Windows output line endings,
+and appended the actual lockfile digest. This qualifies notice generation, not
+a Mac build. Independent review, Rust 1.95 execution, Mac and hardware tests
+remain pending/not run.
+
+Adversarial review correction: schema-valid `width_px: 333.0` initially passed
+validation but the handler silently rendered its 900-pixel default. The new
+PNG-header regression FAILS that candidate and passes after sharing unsigned
+integer parsing across indices, preview widths, trace colors and kerning.
+Whole decimal encodings now work; fractions, negative unsigned counts and
+out-of-range values are rejected instead of saturating or becoming omission.
+Numeric clamping remains in handlers. Index conversion is checked for platform
+width. This review is an implementation-owner pass, not independent approval.
+
+Additional preservation proof uses an opened file and an actual unsaved object
+edit. Numeric and explicit-null Save As paths return tool errors before saving;
+original disk bytes, live serialized work, identity, stable state and Undo length
+remain intact. This is the schema candidate's boundary, not a reason to widen
+the separate save-result PR. Focused Windows regression PASS.
+
+Composition review: carry the names/value separation in this topic itself,
+using the same pure names/container checker and cached catalog as #3. Full
+schema validation remains in check_args after normalization, not the preflight
+helper. Carry the numeric-reference workflow regression here and assert that the
+resolved number actually reaches the object, as well as preserving one Undo.
+A raw merge of the two topic heads must pass without relying on afaa940 from the
+campaign branch. The test is preservation coverage in isolation and discriminates
+premature validation when combined with #3.
