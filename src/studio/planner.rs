@@ -171,6 +171,10 @@ impl Studio {
         self.planner.slow = d.ms > SLOW_MS;
         self.planner.pending = false;
         self.replans += 1;
+        #[cfg(test)]
+        {
+            self.completed_plans += 1;
+        }
         if let Some(p) = self.player {
             self.player = Some(p.min(self.design.stitch_count()));
         }

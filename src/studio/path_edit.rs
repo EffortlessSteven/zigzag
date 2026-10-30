@@ -1440,16 +1440,18 @@ mod tests {
     }
 
     #[test]
-    fn dragging_plans_the_stitches_once_when_let_go() {
+    fn dragging_plans_the_stitches_once_when_let_go() -> anyhow::Result<()> {
         let mut h = studio();
         let i = sun(&h);
         h.state_mut().set_selection(&[i]);
         h.state_mut().set_tool(Tool::Direct);
         h.run_steps(2);
+        crate::test_support::finish_planning(&mut h)?;
         let p = h.state_mut().editable_path().unwrap();
         let a = p[0].anchors[0].p;
         let from = screen(&h, a);
-        let n = h.state().replans;
+        h.state_mut().planner.slow = true;
+        let n = h.state().completed_plans;
         h.hover_at(from);
         h.run_steps(1);
         h.drag_at(from);
@@ -1459,7 +1461,7 @@ mod tests {
             h.run_steps(1);
         }
         assert_eq!(
-            h.state().replans,
+            h.state().completed_plans,
             n,
             "nothing re-planned while dragging a point"
         );
@@ -1467,12 +1469,15 @@ mod tests {
         assert!(preview[0].anchors[0].p.dist(a) > 1.0, "the outline follows");
         h.drop_at(from + Vec2::new(24.0, 0.0));
         h.run_steps(3);
-        assert_eq!(h.state().replans, n + 1, "once on release");
+        crate::test_support::finish_planning(&mut h)?;
+        assert_eq!(h.state().completed_plans, n + 1, "once on release");
         // Moving the object with the Selection tool: the same.
         h.state_mut().set_tool(Tool::Select);
         h.run_steps(2);
+        crate::test_support::finish_planning(&mut h)?;
         let c = screen(&h, shape_bounds(&h.state().doc.shapes[i]).center());
-        let n = h.state().replans;
+        h.state_mut().planner.slow = true;
+        let n = h.state().completed_plans;
         h.hover_at(c);
         h.run_steps(1);
         h.drag_at(c);
@@ -1481,10 +1486,12 @@ mod tests {
             h.hover_at(c + Vec2::new(0.0, 5.0 * k as f32));
             h.run_steps(1);
         }
-        assert_eq!(h.state().replans, n, "nothing re-planned while moving");
+        assert_eq!(h.state().completed_plans, n, "nothing re-planned while moving");
         h.drop_at(c + Vec2::new(0.0, 30.0));
         h.run_steps(3);
-        assert_eq!(h.state().replans, n + 1);
+        crate::test_support::finish_planning(&mut h)?;
+        assert_eq!(h.state().completed_plans, n + 1);
+        Ok(())
     }
 
     #[test]
