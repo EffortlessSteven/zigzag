@@ -1,3 +1,5 @@
+<img src="packaging/macos/AppIcon-dark.png" alt="ZigZag dark mode app icon" width="160" height="160">
+
 # ZigZag
 
 SVG → machine embroidery, in Rust. ZigZag is the app (the visual editor);
