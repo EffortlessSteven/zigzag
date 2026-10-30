@@ -12,6 +12,130 @@ use zigzag::geom::P;
 use zigzag::params::{FABRICS, Kind, Params, parse_hex, underlay};
 use zigzag::svg::{Geometry, Part};
 
+/// Effects compose: tracing both reads a file and edits the document. This
+/// describes transaction scope, not permission granted to a caller.
+#[derive(Clone, Copy)]
+struct ToolEffects(u16);
+
+impl ToolEffects {
+    const READ: u16 = 1;
+    const EDIT: u16 = 2;
+    const UI: u16 = 4;
+    const TABS: u16 = 8;
+    const FILE_READ: u16 = 16;
+    const FILE_WRITE: u16 = 32;
+    const DEVICE: u16 = 64;
+    const HISTORY: u16 = 128;
+    const DYNAMIC: u16 = 256;
+
+    fn atomic(self) -> bool {
+        self.0 & (Self::TABS | Self::FILE_WRITE | Self::DEVICE | Self::HISTORY | Self::DYNAMIC) == 0
+    }
+}
+
+struct ToolPolicy {
+    effects: ToolEffects,
+    reads_plan: bool,
+    destructive: bool,
+}
+
+fn tool_policy(name: &str) -> Option<ToolPolicy> {
+    use ToolEffects as E;
+    let effects = match name {
+        "get_design" | "render_preview" | "check_design" | "get_svg" | "list_fonts"
+        | "list_documents" | "machine_status" => E::READ,
+        "add_svg" | "set_object" | "delete_object" | "move_object" | "set_document"
+        | "transform_objects" | "duplicate_objects" | "add_text" | "edit_text" | "group_colors"
+        | "select" | "round_corners" | "simplify" | "clean_up" => E::EDIT | E::UI,
+        "trace_image" => E::FILE_READ | E::EDIT | E::UI,
+        "open_file" => E::FILE_READ | E::TABS | E::EDIT | E::UI | E::HISTORY,
+        "switch_document" | "new_document" => E::TABS | E::UI | E::HISTORY,
+        "save" => E::FILE_WRITE | E::EDIT | E::UI,
+        "export" => E::READ | E::FILE_WRITE,
+        "send_to_skitch" => E::READ | E::DEVICE,
+        "undo" => E::HISTORY | E::EDIT | E::UI,
+        "batch" => E::DYNAMIC,
+        _ => return None,
+    };
+    Some(ToolPolicy {
+        effects: ToolEffects(effects),
+        reads_plan: matches!(
+            name,
+            "get_design" | "render_preview" | "check_design" | "export" | "send_to_skitch"
+        ),
+        destructive: matches!(
+            name,
+            "delete_object" | "open_file" | "export" | "save" | "batch"
+        ),
+    })
+}
+
+/// Only state belonging to the visible document, never live IO or tab state.
+struct DocumentTransaction {
+    doc: Document,
+    stable: Document,
+    undo: Vec<Document>,
+    redo: Vec<Document>,
+    selected: Option<usize>,
+    hovered: Option<usize>,
+    layout: crate::layout::LayoutState,
+    path_edit: crate::path_edit::PathEdit,
+    modified: bool,
+    dirty: bool,
+    view: crate::canvas::View,
+    fit_pending: bool,
+    player: Option<usize>,
+    playing: bool,
+    player_acc: f32,
+}
+
+impl DocumentTransaction {
+    fn capture(s: &Studio) -> Self {
+        Self {
+            doc: s.doc.clone(),
+            stable: s.stable.clone(),
+            undo: s.undo.clone(),
+            redo: s.redo.clone(),
+            selected: s.selected,
+            hovered: s.hovered,
+            layout: s.layout.clone(),
+            path_edit: s.path_edit.clone(),
+            modified: s.modified,
+            dirty: s.dirty,
+            view: s.view,
+            fit_pending: s.fit_pending,
+            player: s.player,
+            playing: s.playing,
+            player_acc: s.player_acc,
+        }
+    }
+
+    fn restore(self, s: &mut Studio) {
+        s.doc = self.doc;
+        s.stable = self.stable;
+        s.undo = self.undo;
+        s.redo = self.redo;
+        // The restored document must not see caches from failed edits.
+        s.plan_cache = Default::default();
+        *s.stitch_mesh.borrow_mut() = None;
+        *s.preview_mesh.borrow_mut() = None;
+        s.bounds_memo.set(None);
+        *s.satin_memo.borrow_mut() = None;
+        s.replan();
+        s.selected = self.selected;
+        s.hovered = self.hovered;
+        s.layout = self.layout;
+        s.path_edit = self.path_edit;
+        s.modified = self.modified;
+        s.dirty = self.dirty;
+        s.view = self.view;
+        s.fit_pending = self.fit_pending;
+        s.player = self.player;
+        s.playing = self.playing;
+        s.player_acc = self.player_acc;
+    }
+}
+
 pub const INSTRUCTIONS: &str = "ZigZag is a machine-embroidery editor showing live documents on a hoop, one per tab; the tools work on the one in front (list_documents, switch_document, new_document). \
 Coordinates are millimetres from the hoop center (+x right, +y down). The person watching sees every change, and each tool call is one undo step. \
 Typical flow: get_design → add_svg (any SVG artwork) and add_text (lettering) → transform_objects to size and place → set_object to choose stitch types → render_preview to look at the stitches → check_design → save, or export (machine file or html worksheet). \
@@ -427,7 +551,7 @@ pub fn tool_specs() -> Value {
         }),
         json!({
             "name": "batch",
-            "description": "Run several tool calls in one go, in order. Atomic by default: if any step fails nothing changes, and the whole batch is one undo step. A string argument \"$N.field\" (e.g. \"$0.added.0.name\") is replaced by that field of step N's JSON result; write \"$$\" for a literal \"$\". open_file and undo can't run in an atomic batch. The stitches are planned once, at the end (and before any step that reads them: get_design, render_preview, check_design, export), so stitch counts in other steps' results are from before the batch.",
+            "description": "Run several tool calls in one go, in order. Atomic by default: a failed step rolls back document edits and interaction state; successful edits form one undo step. A string argument \"$N.field\" (e.g. \"$0.added.0.name\") is replaced by that field of step N's JSON result; write \"$$\" for a literal \"$\". Atomic batches stay in the current document: tabs, history, file writes, device actions and nested batches are rejected before any step runs. The stitches are planned once, at the end (and before any step that reads them: get_design, render_preview, check_design, export), so stitch counts in other steps' results are from before the batch.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -450,30 +574,6 @@ pub fn tool_specs() -> Value {
             }
         }),
     ];
-    // Hints for clients: which tools only read, and which can lose work.
-    for t in &mut tools {
-        let name = t["name"].as_str().unwrap_or("").to_string();
-        let read_only = matches!(
-            name.as_str(),
-            "get_design"
-                | "list_fonts"
-                | "render_preview"
-                | "check_design"
-                | "get_svg"
-                | "list_documents"
-        );
-        let destructive = matches!(
-            name.as_str(),
-            "delete_object" | "open_file" | "export" | "save"
-        );
-        if t.get("annotations").is_none() {
-            t["annotations"] = if read_only {
-                json!({ "readOnlyHint": true })
-            } else {
-                json!({ "readOnlyHint": false, "destructiveHint": destructive })
-            };
-        }
-    }
     tools.push(json!({
         "name": "send_to_skitch",
         "description": "Send the design to the connected Brother Skitch (the studio's Skitch window connects; ask the person to connect there first if machine_status says it isn't). The window then walks the person through tracing the outline and sewing. Check the design and get the person's go-ahead first.",
@@ -486,6 +586,17 @@ pub fn tool_specs() -> Value {
         "inputSchema": { "type": "object", "properties": {} },
         "annotations": { "readOnlyHint": true }
     }));
+    for tool in &mut tools {
+        let name = tool["name"].as_str().unwrap_or("");
+        if let Some(policy) = tool_policy(name) {
+            let external = ToolEffects::FILE_READ | ToolEffects::FILE_WRITE | ToolEffects::DEVICE | ToolEffects::DYNAMIC;
+            tool["annotations"] = json!({
+                "readOnlyHint": policy.effects.0 == ToolEffects::READ,
+                "destructiveHint": policy.destructive,
+                "openWorldHint": policy.effects.0 & external != 0,
+            });
+        }
+    }
     Value::Array(tools)
 }
 
@@ -835,17 +946,16 @@ impl Studio {
             return ToolResult::error(e);
         }
         // Inside a batch, only a step that reads the stitches waits for them.
-        let reads = matches!(
-            name,
-            "get_design" | "render_preview" | "check_design" | "export" | "send_to_skitch"
-        );
+        if name == "batch" {
+            return self.tool_batch(args);
+        }
+        let reads = tool_policy(name).is_some_and(|policy| policy.reads_plan);
         if (!self.batching && self.dirty_needs_plan())
             || (self.batching && reads && (self.dirty || self.dirty_needs_plan()))
         {
             self.replan();
         }
         let result = match name {
-            "batch" => return self.tool_batch(args),
             "trace_image" => self.tool_trace_image(args),
             "round_corners" => self.tool_round_corners(args),
             "simplify" => self.tool_simplify(args),
@@ -1074,6 +1184,9 @@ impl Studio {
         let was = std::mem::replace(&mut self.batching, true);
         let r = self.tool_batch_steps(args);
         self.batching = was;
+        if r.is_error && args.get("atomic").and_then(Value::as_bool).unwrap_or(true) {
+            return r;
+        }
         if !was && self.undo.len() > crate::app::UNDO_STEPS {
             let extra = self.undo.len() - crate::app::UNDO_STEPS;
             self.undo.drain(..extra);
@@ -1092,13 +1205,20 @@ impl Studio {
             return ToolResult::error("at most 64 steps in a batch");
         }
         let atomic = args.get("atomic").and_then(Value::as_bool).unwrap_or(true);
-        let (undo0, doc0, redo0, sel0, modified0) = (
-            self.undo.len(),
-            self.doc.clone(),
-            self.redo.clone(),
-            self.selected,
-            self.modified,
-        );
+        // Reject every scope escape before step zero, including unknown names.
+        let rejected: Vec<String> = steps.iter().enumerate().filter_map(|(k, step)| {
+            let name = step.get("tool").and_then(Value::as_str).unwrap_or("");
+            (atomic && !tool_policy(name).is_some_and(|p| p.effects.atomic())).then(|| format!("step {k} (`{name}`)"))
+        }).collect();
+        if !rejected.is_empty() {
+            let msg = format!("Batch preflight rejected {}. No steps ran.", rejected.join(", "));
+            self.status = msg.clone();
+            let mut result = ToolResult::json(&json!({ "error": msg, "results": [] }));
+            result.is_error = true;
+            return result;
+        }
+        let undo0 = self.undo.len();
+        let snapshot = atomic.then(|| DocumentTransaction::capture(self));
         let mut results: Vec<Value> = Vec::new();
         let mut report = Vec::new();
         let mut images = Vec::new();
@@ -1107,15 +1227,14 @@ impl Studio {
             let failed = |msg: String| {
                 if atomic {
                     format!(
-                        "Step {k} ({tool}) failed: {msg} Nothing was changed: the batch is all or nothing."
+                        "Step {k} ({tool}) failed: {msg} Document edits and interaction state were rolled back."
                     )
                 } else {
                     format!("Step {k} ({tool}) failed: {msg} Steps before it were kept.")
                 }
             };
-            // Opening a file clears the history, so it couldn't be rolled back.
-            let outcome = if tool == "batch" || (atomic && matches!(tool, "undo" | "open_file")) {
-                Err(format!("`{tool}` can't run inside an atomic batch."))
+            let outcome = if tool == "batch" {
+                Err("nested batches are not supported".into())
             } else {
                 resolve_refs(step.get("arguments").unwrap_or(&json!({})), &results)
                     .map(|a| self.run_tool(tool, &a))
@@ -1123,16 +1242,10 @@ impl Studio {
             let r = outcome.unwrap_or_else(ToolResult::error);
             if r.is_error {
                 let msg = failed(text_of(&r));
-                if atomic {
-                    self.doc = doc0;
-                    self.undo.truncate(undo0);
-                    self.redo = redo0;
-                    self.stable = self.doc.clone();
-                    self.selected = sel0;
-                    self.modified = modified0;
-                    self.dirty = true;
-                    self.replan();
+                if let Some(snapshot) = snapshot {
+                    snapshot.restore(self);
                 }
+                self.status = msg.clone();
                 let mut r = ToolResult::json(&json!({ "error": msg, "results": report }));
                 r.is_error = true;
                 return r;
@@ -1883,6 +1996,198 @@ mod tests {
     use super::*;
     use crate::app::Studio;
     use std::io::{Read, Write};
+
+    fn tab_state(s: &Studio) -> Value {
+        json!({
+            "active": s.active_tab(),
+            "tabs": s.tab_infos().iter().map(|t| json!([t.name, t.path, t.modified])).collect::<Vec<_>>(),
+            "parked": s.tabs.list.iter().map(|t| json!([t.doc.xml, t.doc.path, t.modified])).collect::<Vec<_>>(),
+            "live": [&s.doc.xml], "path": s.doc.path, "modified": s.modified,
+        })
+    }
+
+    #[test]
+    fn atomic_batch_cannot_replace_another_tabs_document() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        ensure!(
+            !s.run_tool("add_svg", &json!({"svg": BADGE})).is_error,
+            "fixture failed"
+        );
+        s.doc.name = "A".into();
+        s.new_tab();
+        s.doc.name = "B".into();
+        s.switch_tab(0);
+        let before = tab_state(&s);
+        let failed = s.run_tool(
+            "batch",
+            &json!({"steps": [
+                {"tool": "switch_document", "arguments": {"index": 1}},
+                {"tool": "set_object", "arguments": {"object": "missing"}}
+            ]}),
+        );
+        ensure!(failed.is_error, "batch should fail");
+        ensure!(tab_state(&s) == before, "failed batch corrupted tab state");
+        Ok(())
+    }
+
+    #[test]
+    fn atomic_batch_preflight_preserves_every_tab() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        let first = s.run_tool("add_svg", &json!({"svg": BADGE}));
+        ensure!(!first.is_error, "fixture failed");
+        s.doc.name = "A".into();
+        s.new_tab();
+        s.doc.name = "B".into();
+        s.switch_tab(0);
+        let before = tab_state(&s);
+        let n = s.undo.len();
+        let mut steps = vec![json!({"tool": "add_svg", "arguments": {"svg": BADGE}})];
+        let denied = [
+            "switch_document",
+            "new_document",
+            "open_file",
+            "save",
+            "export",
+            "send_to_skitch",
+            "undo",
+            "batch",
+        ];
+        for tool in denied {
+            steps.push(json!({"tool": tool}));
+        }
+        let result = s.run_tool("batch", &json!({"steps": steps}));
+        ensure!(result.is_error, "scope escape allowed");
+        let message = text(&result);
+        for tool in denied {
+            ensure!(message.contains(tool), "missing rejection for {tool}");
+            // Each forbidden tool must be rejected in isolation too.
+            ensure!(
+                s.run_tool("batch", &json!({"steps": [{"tool": tool}]}))
+                    .is_error,
+                "allowed {tool}"
+            );
+        }
+        ensure!(
+            tab_state(&s) == before,
+            "preflight changed tabs or document"
+        );
+        ensure!(s.undo.len() == n, "step zero ran");
+        Ok(())
+    }
+
+    #[test]
+    fn atomic_batch_restores_selection_view_history_and_stable() -> anyhow::Result<()> {
+        use anyhow::ensure;
+        let mut s = Studio::with_file(None, None);
+        ensure!(
+            !s.run_tool("add_svg", &json!({"svg": BADGE})).is_error,
+            "fixture failed"
+        );
+        s.set_selection(&[0, 1]);
+        s.view.center = P::new(123.0, 456.0);
+        s.view.scale = 17.0;
+        s.fit_pending = false;
+        s.player = Some(1);
+        s.playing = true;
+        s.player_acc = 0.5;
+        s.layout.isolated = vec!["group".into()];
+        // Stable can differ from the live doc during UI editing.
+        s.stable = Document::empty();
+        s.redo.push(Document::empty());
+        for (tool, arguments) in [
+            ("duplicate_objects", json!({"objects": [0, 1]})),
+            (
+                "transform_objects",
+                json!({"objects": [2, 3], "move_by_mm": [2, 3]}),
+            ),
+            ("add_svg", json!({"svg": BADGE})),
+        ] {
+            let snapshot = DocumentTransaction::capture(&s);
+            let before = tab_state(&s);
+            let result = s.run_tool(
+                "batch",
+                &json!({"steps": [
+                    {"tool": tool, "arguments": arguments},
+                    {"tool": "set_object", "arguments": {"object": "missing", "kind": "satin"}}
+                ]}),
+            );
+            ensure!(result.is_error, "failure accepted");
+            ensure!(
+                text(&result).contains("Step 1"),
+                "first step did not execute: {}",
+                text(&result)
+            );
+            ensure!(tab_state(&s) == before, "document or tabs changed");
+            ensure!(
+                s.selected == snapshot.selected && s.layout.multi == snapshot.layout.multi,
+                "selection leaked"
+            );
+            ensure!(
+                s.layout.isolated == snapshot.layout.isolated,
+                "isolation leaked"
+            );
+            ensure!(
+                s.view.center == snapshot.view.center
+                    && s.view.scale == snapshot.view.scale
+                    && s.fit_pending == snapshot.fit_pending,
+                "view leaked"
+            );
+            ensure!(
+                s.stable.xml == snapshot.stable.xml,
+                "stable reconstructed incorrectly"
+            );
+            ensure!(
+                s.undo.len() == snapshot.undo.len() && s.redo.len() == snapshot.redo.len(),
+                "history leaked"
+            );
+            ensure!(
+                s.player == snapshot.player
+                    && s.playing == snapshot.playing
+                    && s.player_acc == snapshot.player_acc,
+                "player changed"
+            );
+            ensure!(s.status.contains("failed"), "failure hidden from UI");
+        }
+        // Non-atomic batches retain earlier completed work.
+        let count = s.doc.shapes.len();
+        let result = s.run_tool(
+            "batch",
+            &json!({"atomic": false, "steps": [
+                {"tool": "add_svg", "arguments": {"svg": BADGE}},
+                {"tool": "set_object", "arguments": {"object": "missing"}}
+            ]}),
+        );
+        ensure!(
+            result.is_error && s.doc.shapes.len() > count,
+            "non-atomic work lost"
+        );
+        ensure!(
+            text(&result).contains("were kept"),
+            "missing partial-work diagnostic"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn every_exposed_tool_has_effects_and_batch_hints_are_conservative() -> anyhow::Result<()> {
+        use anyhow::{Context, ensure};
+        let specs = tool_specs();
+        for spec in specs.as_array().context("tool array")? {
+            let name = spec["name"].as_str().context("tool name")?;
+            ensure!(tool_policy(name).is_some(), "missing policy: {name}");
+            if name == "batch" {
+                ensure!(
+                    spec["annotations"]
+                        == json!({"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true}),
+                    "unsafe batch hints"
+                );
+            }
+        }
+        ensure!(tool_policy("unknown").is_none(), "unknown tool classified");
+        Ok(())
+    }
 
     const BADGE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
         <circle id="patch" cx="50" cy="50" r="48" fill="#1d3557"/>
