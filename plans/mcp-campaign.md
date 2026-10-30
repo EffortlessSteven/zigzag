@@ -1,13 +1,16 @@
 # MCP reliability campaign
 
 Destination: `EffortlessSteven/zigzag` (fork). Do not submit upstream PRs.
-Keep each numbered seam in a separate review-forward PR. No release publishing
-or hardware qualification is authorized by this plan.
+The numbered inventory below is an investigation map, not eleven commitments.
+Reproduce, narrow or reject findings; choose contribution boundaries from proof.
+Steven explicitly decides any upstream submission after review. No release
+publishing or hardware qualification is authorized by this plan. Keep internal
+campaign context on the fork; extract clean upstream candidates only later.
 
 | Slice | Seam | Dependencies | State |
 | --- | --- | --- | --- |
 | 1 | Propagate save failures through MCP | none | verified; fork PR pending |
-| 2 | Atomic document and export replacement | 1 | verified; stacked fork PR |
+| 2 | Atomic document and export replacement | 1 | pending |
 | 3 | Current-document atomic batches and shared tool policy | none | pending |
 | 4 | Design-only embedded agent capabilities | 3 | pending |
 | 5 | JSON-RPC bridge error serialization | none | pending |
@@ -54,6 +57,13 @@ Base: `81825c4`. Windows, rustc 1.98.0. Locked dependencies.
 
 Proof covers save result propagation and preserved save state. It does not prove
 atomic replacement or power-loss durability; slice 2 owns that contract.
+
+Red/green witness added after initial verification: test-only insertion of
+`unmodified_failed_save_as_is_an_mcp_error` into the original `81825c4` source
+(tools, app, commands and session) FAILS with `filesystem failure was reported
+as MCP success`. Patched save tests PASS (2). This directly discriminates the
+false-success defect. Independent review remains pending; do not treat an open
+fork PR as reviewed or ready for upstream submission.
 
 ## Slice 2 verified plan
 
