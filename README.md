@@ -2,6 +2,8 @@
 
 # ZigZag
 
+**[Visit zigzag.diy](https://zigzag.diy/)**
+
 ZigZag is a visual embroidery editor built in Rust for performance, with
 built-in **MCP (Model Context Protocol)** support so AI agents can create and
 edit designs alongside you. Turn SVG artwork into stitches, fine-tune it in
@@ -11,6 +13,10 @@ with embroidery machines—or send designs directly to a **Brother Skitch
 
 Draw in Illustrator, draw in ZigZag, or let an agent draw. The Rust engine
 and `zigzag` command-line tool power the same workflow outside the editor.
+
+## See ZigZag in action
+
+https://github.com/user-attachments/assets/94812f25-82f4-429f-85db-5e20c1d5e723
 
 ## Download for Mac
 
