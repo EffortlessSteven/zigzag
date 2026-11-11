@@ -1,0 +1,141 @@
+name: Windows release
+
+# Builds an unsigned Windows zip for a ZigZag release and
+# uploads it to the matching GitHub release. The Mac flow still drives
+# release creation (packaging/macos/publish-release.sh); this workflow
+# fires once that release is published, so both downloads end up on the
+# same release page. Use workflow_dispatch to retry or to build without
+# the Mac flow.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (e.g. v0.1.0) to build and attach to.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build zigzag-${{ github.event.release.tag_name || inputs.tag }}-x86_64-windows
+    runs-on: windows-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.release.tag_name || inputs.tag }}"
+          if (-not $tag) { throw "No tag provided." }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Expected a vX.Y.Z tag, got $tag" }
+          $version = $tag.TrimStart('v')
+          "tag=$tag"         | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      # Always build the tagged source so retries match the released Mac build.
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Verify Cargo.toml version matches tag
+        shell: pwsh
+        run: |
+          $cargoVersion = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          if ($cargoVersion -ne "${{ steps.tag.outputs.version }}") {
+            throw "Cargo.toml version ($cargoVersion) doesn't match tag ${{ steps.tag.outputs.tag }}"
+          }
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-release-${{ steps.tag.outputs.tag }}
+
+      - name: Regenerate AppIcon.ico
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade --quiet pillow
+          python packaging/windows/make-icon.py
+
+      - name: Build release binaries
+        shell: pwsh
+        env:
+          # Static CRT: one self-contained .exe per binary, no VC++ redist needed.
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: >
+          cargo build --locked --release
+          --features gui,ble
+          --target x86_64-pc-windows-msvc
+          --bin zigzag-studio --bin zigzag --bin zigzag-mcp
+
+      - name: Stage release folder
+        id: stage
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.tag.outputs.version }}"
+          $name = "ZigZag-$ver-x86_64-windows"
+          $stage = "dist\$name"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          $bin = "target\x86_64-pc-windows-msvc\release"
+          # Windows filenames are case-insensitive: the CLI needs a distinct name.
+          Copy-Item "$bin\zigzag-studio.exe" "$stage\ZigZag.exe"
+          Copy-Item "$bin\zigzag.exe"        "$stage\zigzag-cli.exe"
+          Copy-Item "$bin\zigzag-mcp.exe"    "$stage\"
+          $executables = @(Get-ChildItem $stage -Filter '*.exe')
+          if ($executables.Count -ne 3) { throw "Expected three distinct release executables." }
+          foreach ($exeName in @('ZigZag.exe', 'zigzag-cli.exe', 'zigzag-mcp.exe')) {
+            $actualVersion = (Get-Item "$stage\$exeName").VersionInfo.ProductVersion
+            if ($actualVersion -ne $ver) { throw "$exeName has version $actualVersion; expected $ver" }
+          }
+          $studioHelp = & "$stage\ZigZag.exe" --help
+          if ($LASTEXITCODE -ne 0 -or "$studioHelp" -notmatch 'usage: zigzag-studio') {
+            throw "The packaged studio failed its startup check."
+          }
+          $cliVersion = & "$stage\zigzag-cli.exe" --version
+          if ($LASTEXITCODE -ne 0 -or $cliVersion -ne "zigzag $ver") {
+            throw "The packaged CLI failed its version check."
+          }
+          Copy-Item LICENSE, NOTICE, THIRD-PARTY-NOTICES.md "$stage\"
+          Copy-Item packaging\windows\README.txt "$stage\"
+          $zip = "dist\$name.zip"
+          if (Test-Path $zip) { Remove-Item $zip }
+          Compress-Archive -Path $stage -DestinationPath $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "dist\SHA256SUMS-windows.txt"
+          "zip=$zip"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "sums=dist\SHA256SUMS-windows.txt" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "hash=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.tag.outputs.tag }}"
+          # If the release doesn't exist yet (manual run before Mac flow),
+          # create it as a draft so the upload has somewhere to go.
+          $null = gh release view $tag --repo ${{ github.repository }} 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo ${{ github.repository }} --draft `
+              --title "ZigZag ${{ steps.tag.outputs.version }}"
+          }
+          gh release upload $tag --repo ${{ github.repository }} --clobber `
+            "${{ steps.stage.outputs.zip }}" "${{ steps.stage.outputs.sums }}"
+
+      - name: Artifact for retries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZigZag-${{ steps.tag.outputs.version }}-x86_64-windows
+          path: |
+            ${{ steps.stage.outputs.zip }}
+            ${{ steps.stage.outputs.sums }}
+          if-no-files-found: error
