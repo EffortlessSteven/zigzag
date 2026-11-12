@@ -1693,6 +1693,10 @@ mod tests {
     use zigzag::machine::sim::{Sim, SimConfig};
 
     fn studio(sim: SimConfig) -> (Harness<'static, Studio>, Sim) {
+        studio_with_sim(|| Sim::new(sim))
+    }
+
+    fn studio_with_sim(make_sim: impl FnOnce() -> Sim) -> (Harness<'static, Studio>, Sim) {
         let path =
             std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/examples/badge.svg"));
         let mut h = Harness::builder()
@@ -1701,7 +1705,7 @@ mod tests {
                 |ui, s: &mut Studio| s.frame(ui),
                 Studio::with_file(Some(path), None),
             );
-        let sim = Sim::new(sim);
+        let sim = make_sim();
         h.state_mut().machine.sim = Some(sim.clone());
         h.run_steps(3);
         (h, sim)
@@ -1717,7 +1721,8 @@ mod tests {
 
     /// Run frames until `f` holds of the machine.
     fn until(h: &mut Harness<'_, Studio>, what: &str, f: impl Fn(&Snapshot) -> bool) {
-        for _ in 0..1500 {
+        let started = std::time::Instant::now();
+        while started.elapsed() < std::time::Duration::from_secs(10) {
             h.run_steps(1);
             if f(&h.state().machine.snapshot()) {
                 h.run_steps(2);
@@ -1733,8 +1738,8 @@ mod tests {
     }
 
     #[test]
-    fn the_window_walks_through_a_whole_job_with_the_threads_to_use() {
-        let (mut h, _sim) = studio(fast());
+    fn the_window_walks_through_a_whole_job_with_the_threads_to_use() -> anyhow::Result<()> {
+        let (mut h, sim) = studio_with_sim(|| Sim::manual(fast()));
         h.state_mut().send_action();
         h.run_steps(2);
         assert!(h.state().machine.open, "Send opens the Skitch window");
@@ -1751,12 +1756,21 @@ mod tests {
         // A machine just turned on wants homing first.
         until(&mut h, "homing", status(Status::Initial));
         assert!(h.query_by_label("Home the machine").is_some());
+        sim.advance(std::time::Duration::from_secs(1))?;
         until(&mut h, "homed", status(Status::Idle));
         // What to have ready, before sending.
         assert!(h.query_by_label("Threads to have ready").is_some());
         h.get_by_label("Send Design").click();
         // Sent, then the outline traced (after Accept on the machine).
         until(&mut h, "sent", |s| s.uuid.is_some() && s.upload.is_none());
+        until(
+            &mut h,
+            "waiting to trace",
+            status(Status::WaitingForMaskTrace),
+        );
+        sim.advance(std::time::Duration::from_secs(1))?;
+        until(&mut h, "tracing", status(Status::MaskTracing));
+        sim.advance(std::time::Duration::from_secs(1))?;
         until(&mut h, "traced", status(Status::MaskTraceComplete));
         // Which thread to put on first.
         assert!(h.query_by_label("Put on the first thread").is_some());
@@ -1764,9 +1778,11 @@ mod tests {
         h.get_by_label("Start").click();
         until(&mut h, "start on the machine", status(Status::ReadyToSew));
         assert!(h.query_by_label("Press Start on the machine").is_some());
+        sim.advance(std::time::Duration::from_secs(1))?;
         until(&mut h, "sewing", status(Status::Sewing));
         // Pause is the machine's own button.
         assert!(h.query_by_label("Pause").is_some());
+        sim.advance(std::time::Duration::from_secs(10))?;
         // The thread change: which one to put on.
         until(
             &mut h,
@@ -1785,6 +1801,10 @@ mod tests {
             "the status bar chip"
         );
         assert!(h.query_by_label("Stitch timeline").is_some());
+        for _ in 1..4 {
+            sim.advance(std::time::Duration::from_secs(1))?;
+            sim.advance(std::time::Duration::from_secs(10))?;
+        }
         until(&mut h, "finished", status(Status::Complete));
         assert!(h.query_by_label("Finished").is_some());
         assert_eq!(
@@ -1799,6 +1819,7 @@ mod tests {
                     .stitch_count()
             )
         );
+        Ok(())
     }
 
     #[test]
