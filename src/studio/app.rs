@@ -953,15 +953,13 @@ impl Studio {
             None => return true,
         };
         for call in calls {
-            let at = Instant::now();
-            // Its client gave up waiting (a dialog was open): it was told
-            // the call failed, so running it now would surprise it.
-            if at > call.deadline {
+            if !call.try_start() {
                 continue;
             }
+            let at = Instant::now();
             let result = self.run_mcp_call(&call.name, &call.args);
             self.mcp_ui.note(&call.name, at, &result);
-            let _ = call.reply.send(result);
+            call.complete(result);
         }
         true
     }
