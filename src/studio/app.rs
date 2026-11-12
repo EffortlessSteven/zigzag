@@ -667,7 +667,7 @@ impl Studio {
             .any(|i| i.shape.is_none() && i.level == Level::Error)
     }
 
-    pub fn save(&mut self, path: Option<&Path>) {
+    pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<PathBuf> {
         match self.doc.save(path) {
             Ok(p) => {
                 self.stable = self.doc.clone();
@@ -677,8 +677,12 @@ impl Studio {
                     p.display()
                 );
                 self.dirty = true;
+                Ok(p)
             }
-            Err(e) => self.status = format!("Couldn't save: {e:#}"),
+            Err(e) => {
+                self.status = format!("Couldn't save: {e:#}");
+                Err(e)
+            }
         }
     }
 
@@ -698,7 +702,7 @@ impl Studio {
             dialog = dialog.set_directory(dir);
         }
         if let Some(p) = dialog.save_file() {
-            self.save(Some(&p));
+            let _ = self.save(Some(&p));
         }
     }
 
