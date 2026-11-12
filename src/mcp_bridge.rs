@@ -82,19 +82,50 @@ fn dechunk(mut s: &[u8]) -> Vec<u8> {
     out
 }
 
-/// A JSON-RPC error answering `line`; none for a notification (no id) or a
-/// line that isn't JSON.
+/// A JSON-RPC error answering `line` when the studio is unavailable.
+/// Notifications receive no response; malformed requests receive protocol errors.
 fn error_reply(line: &str, message: &str) -> Option<String> {
-    let req: serde_json::Value = serde_json::from_str(line).ok()?;
-    let id = req.get("id")?;
-    Some(
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {"code": -32000, "message": message},
-        })
-        .to_string(),
-    )
+    use serde_json::{Value, json};
+    let error = |id: Value, code: i64, message: &str| {
+        Some(
+            json!({
+                "jsonrpc": "2.0", "id": id,
+                "error": { "code": code, "message": message }
+            })
+            .to_string(),
+        )
+    };
+    let request: Value = match serde_json::from_str(line) {
+        Ok(request) => request,
+        Err(_) => return error(Value::Null, -32700, "Parse error"),
+    };
+    let valid_id = request.get("id").is_none_or(|id| {
+        id.is_string()
+            || id.is_i64()
+            || id.is_u64()
+            || id
+                .as_f64()
+                .is_some_and(|n| n.is_finite() && n.fract() == 0.0)
+    });
+    if !request.is_object()
+        || request.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
+        || request.get("method").and_then(Value::as_str).is_none()
+        || !valid_id
+    {
+        return error(Value::Null, -32600, "Invalid request for MCP 2025-06-18");
+    }
+    let id = request.get("id")?;
+    if request
+        .get("params")
+        .is_some_and(|params| !params.is_object())
+    {
+        return error(
+            id.clone(),
+            -32602,
+            "Invalid params: MCP parameters must be an object",
+        );
+    }
+    error(id.clone(), -32000, message)
 }
 
 fn main() {
@@ -185,6 +216,63 @@ mod tests {
         assert!(!r.contains('\n'), "one line");
         // Notifications get no reply.
         assert!(error_reply(r#"{"jsonrpc":"2.0","method":"x"}"#, "m").is_none());
+    }
+
+    #[test]
+    fn offline_bridge_reports_invalid_json_and_envelopes() {
+        use serde_json::{Value, json};
+        let reply = |line: &str| -> Value {
+            serde_json::from_str(&error_reply(line, "unavailable").unwrap()).unwrap()
+        };
+        for invalid in ["{", "not json", ""] {
+            let result = reply(invalid);
+            assert_eq!(result["id"], Value::Null);
+            assert_eq!(result["error"]["code"], -32700);
+        }
+        for invalid in [
+            json!([]),
+            json!(null),
+            json!({}),
+            json!({"jsonrpc":"1.0","id":1,"method":"ping"}),
+            json!({"jsonrpc":"2.0","id":1}),
+            json!({"jsonrpc":"2.0","id":null,"method":"ping"}),
+            json!({"jsonrpc":"2.0","id":1.5,"method":"ping"}),
+            json!({"jsonrpc":"2.0","id":{},"method":"ping"}),
+        ] {
+            let result = reply(&invalid.to_string());
+            assert_eq!(result["id"], Value::Null, "{invalid}");
+            assert_eq!(result["error"]["code"], -32600, "{invalid}");
+        }
+    }
+
+    #[test]
+    fn offline_bridge_preserves_ids_and_suppresses_notifications() {
+        use serde_json::{Value, json};
+        let message = "Could not connect: \"quoted\" \\path\nnext line";
+        for id in [
+            json!(0),
+            json!(-17),
+            json!(u64::MAX),
+            json!(17.0),
+            json!("job,part-2}"),
+        ] {
+            let input = json!({"jsonrpc":"2.0","method":"ping","id":id});
+            let result: Value =
+                serde_json::from_str(&error_reply(&input.to_string(), message).unwrap()).unwrap();
+            assert_eq!(result["id"], id);
+            assert_eq!(result["error"]["code"], -32000);
+            assert_eq!(result["error"]["message"], message);
+        }
+        for params in [json!([]), json!(null), json!(3), json!("bad")] {
+            let request = json!({"jsonrpc":"2.0","method":"ping","id":"job-7","params":params});
+            let result: Value =
+                serde_json::from_str(&error_reply(&request.to_string(), message).unwrap()).unwrap();
+            assert_eq!(result["id"], "job-7");
+            assert_eq!(result["error"]["code"], -32602);
+            let notification =
+                json!({"jsonrpc":"2.0","method":"notifications/initialized","params":params});
+            assert!(error_reply(&notification.to_string(), message).is_none());
+        }
     }
 
     #[test]
